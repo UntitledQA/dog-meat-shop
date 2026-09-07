@@ -1,0 +1,161 @@
+# Docker Compose для «Мясо для собак» (Telegram Mini App).
+#
+# Перед первым запуском:
+#   cp .env.example .env      (Windows PowerShell: Copy-Item .env.example .env)
+#   заполнить BOT_TOKEN, BOT_USERNAME, ADMIN_TELEGRAM_IDS, WEBAPP_URL
+#   docker compose up --build
+#
+# Порты на хосте (меняются переменными в .env):
+#   5433 -> postgres   (5433, а не 5432, чтобы не конфликтовать с локальной СУБД)
+#   8000 -> backend    (FastAPI, http://localhost:8000/docs)
+#   5173 -> frontend   (nginx со сборкой SPA, http://localhost:5173)
+#
+# Поле `version:` намеренно отсутствует — оно устарело в Compose Specification.
+
+name: dogmeat
+
+services:
+  # ---------------------------------------------------------------- база данных
+  db:
+    image: postgres:16-alpine
+    container_name: dogmeat-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-meat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-meat}
+      POSTGRES_DB: ${POSTGRES_DB:-meat}
+      # Явная кодировка, чтобы initdb не зависел от локали хоста.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Наружу отдаём 5433, чтобы не спорить с локально установленным PostgreSQL.
+      - "${DB_PORT:-5433}:5432"
+    healthcheck:
+      # backend стартует только после того, как эта проверка станет healthy.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-meat} -d ${POSTGRES_DB:-meat} -q"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    stop_grace_period: 30s
+    networks:
+      - dogmeat
+
+  # ------------------------------------------------------------------- API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: dogmeat-backend:local
+    container_name: dogmeat-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # ВАЖНО: внутри Docker хост базы — `db`, а не `localhost`.
+      # Эти значения перекрывают то, что записано в .env (там URL для локального запуска).
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-meat}:${POSTGRES_PASSWORD:-meat}@db:5432/${POSTGRES_DB:-meat}
+      # Абсолютный путь: config.py разрешает относительный UPLOAD_DIR от корня проекта,
+      # а в образе корень другой — поэтому фиксируем точку монтирования тома.
+      UPLOAD_DIR: /app/uploads
+      RUN_MIGRATIONS: "true"
+    # entrypoint.sh: ждёт БД -> alembic upgrade head -> exec этой команды
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - "*"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      # В образе нет curl — проверяем GET /health штатным Python.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    stop_grace_period: 30s
+    networks:
+      - dogmeat
+
+  # ------------------------------------------------------------------- бот
+  # Тот же образ, что и backend, но отдельный процесс: long polling не должен
+  # делить event loop с воркерами API (иначе долгие апдейты тормозят HTTP).
+  bot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: dogmeat-backend:local
+    container_name: dogmeat-bot
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-meat}:${POSTGRES_PASSWORD:-meat}@db:5432/${POSTGRES_DB:-meat}
+      UPLOAD_DIR: /app/uploads
+      # Миграции уже применил backend — второй раз не нужно.
+      RUN_MIGRATIONS: "false"
+    command: ["python", "-m", "app.bot_main"]
+    volumes:
+      - uploads:/app/uploads
+    # Telegram нужно время, чтобы отпустить long polling: даём боту закрыться мягко.
+    stop_grace_period: 30s
+    networks:
+      - dogmeat
+
+  # -------------------------------------------------------------- фронтенд
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Запросы идут на тот же origin, nginx проксирует /api и /uploads на backend.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+    image: dogmeat-frontend:local
+    container_name: dogmeat-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "--tries=1", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    stop_grace_period: 10s
+    networks:
+      - dogmeat
+
+volumes:
+  # Данные PostgreSQL. `docker compose down` их не удаляет, `down -v` — удаляет.
+  pgdata:
+  # Загруженные фотографии товаров. Общий том для backend и bot.
+  uploads:
+
+networks:
+  dogmeat:
+    driver: bridge

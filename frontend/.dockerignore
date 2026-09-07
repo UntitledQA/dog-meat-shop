@@ -1,0 +1,42 @@
+# Что НЕ попадает в контекст сборки frontend-образа.
+
+# --- зависимости и артефакты сборки ---
+node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+*.local
+
+# --- кэши инструментов ---
+.eslintcache
+coverage/
+.nyc_output/
+.turbo/
+.cache/
+
+# --- секреты и локальные настройки ---
+.env
+.env.*
+!.env.example
+
+# --- git и служебное ---
+.git/
+.gitignore
+.gitattributes
+.dockerignore
+Dockerfile
+
+# --- IDE / ОС ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- логи ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log

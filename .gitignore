@@ -1,0 +1,98 @@
+# ============================ секреты и окружение ============================
+.env
+.env.*
+!.env.example
+
+# ================================== Python ==================================
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# сборка и метаданные пакетов
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+sdist/
+wheels/
+share/python-wheels/
+MANIFEST
+
+# кэши инструментов
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.tox/
+.nox/
+.ipynb_checkpoints/
+
+# покрытие тестами
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+nosetests.xml
+*.cover
+
+# =================================== Node ===================================
+node_modules/
+dist/
+dist-ssr/
+.vite/
+.turbo/
+.eslintcache
+*.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# ============================== данные проекта ==============================
+# Загруженные фотографии товаров: сам каталог в репозитории нужен, содержимое — нет.
+uploads/*
+!uploads/.gitkeep
+
+# Локальные базы (SQLite используется в тестах)
+*.db
+*.sqlite
+*.sqlite3
+
+# Логи и дампы
+logs/
+*.log
+*.sql.gz
+*.dump
+
+# =================================== IDE ====================================
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.iml
+*.swp
+*.swo
+*~
+
+# ============================ операционная система ==========================
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ================================= прочее ===================================
+*.bak
+*.tmp
+.claude/settings.local.json
