@@ -13,23 +13,44 @@ MIN_WEIGHT = Decimal("0.1")
 
 
 def to_decimal(value: object) -> Decimal:
-    """Безопасно приводит значение к Decimal (float — через str, чтобы не тащить двоичную ошибку)."""
+    """Приводит значение к Decimal.
+
+    float переводится через str, иначе в значение утекает двоичная погрешность.
+    NaN и бесконечности отбрасываются: иначе они доходят до quantize и падают
+    там уже как ArithmeticError, который Pydantic не превращает в 422.
+    """
     if isinstance(value, Decimal):
-        return value
-    if isinstance(value, float):
-        return Decimal(str(value))
-    try:
-        return Decimal(str(value))
-    except (InvalidOperation, TypeError, ValueError) as exc:
-        raise ValueError(f"Некорректное числовое значение: {value!r}") from exc
+        result = value
+    elif isinstance(value, float):
+        result = Decimal(str(value))
+    else:
+        try:
+            result = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValueError(f"Некорректное числовое значение: {value!r}") from exc
+
+    if not result.is_finite():
+        raise ValueError("Значение должно быть конечным числом")
+    return result
 
 
 def round_money(value: object) -> Decimal:
-    return to_decimal(value).quantize(MONEY_EXP, rounding=ROUND_HALF_UP)
+    """Округляет до копеек.
+
+    `InvalidOperation` (например, на «1e1000») превращается в `ValueError`, чтобы
+    ошибка ввода стала 422, а не 500.
+    """
+    try:
+        return to_decimal(value).quantize(MONEY_EXP, rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        raise ValueError("Слишком большое числовое значение") from None
 
 
 def round_weight(value: object) -> Decimal:
-    return to_decimal(value).quantize(WEIGHT_EXP, rounding=ROUND_HALF_UP)
+    try:
+        return to_decimal(value).quantize(WEIGHT_EXP, rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        raise ValueError("Слишком большое числовое значение") from None
 
 
 def line_total(weight_kg: object, price_per_kg: object) -> Decimal:

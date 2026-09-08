@@ -20,7 +20,6 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -54,7 +53,7 @@ try:  # pragma: no cover - зависит от окружения
     )
 
     _PERMANENT_ERRORS: tuple[type[Exception], ...] = (TelegramForbiddenError, TelegramBadRequest)
-    _RETRY_AFTER_ERROR: Optional[type[Exception]] = TelegramRetryAfter
+    _RETRY_AFTER_ERROR: type[Exception] | None = TelegramRetryAfter
 except Exception:  # pragma: no cover - aiogram отсутствует
     _PERMANENT_ERRORS = ()
     _RETRY_AFTER_ERROR = None
@@ -234,7 +233,7 @@ async def notify_new_order(order_id: int) -> None:
             delivered=delivered,
             planned=len(queue),
         )
-    except Exception as exc:  # noqa: BLE001 - наружу не должно выйти ничего
+    except Exception as exc:
         logger.error(
             "notification_unexpected_error",
             order_id=order_id,
@@ -266,7 +265,7 @@ async def notify_order_status_changed(order_id: int, new_status: OrderStatus) ->
                 kind=f"status_{status.value}",
             )
         )
-    except Exception as exc:  # noqa: BLE001 - наружу не должно выйти ничего
+    except Exception as exc:
         logger.error(
             "notification_unexpected_error",
             order_id=order_id,
@@ -300,7 +299,7 @@ async def retry_failed(limit: int = FAILED_QUEUE_MAXLEN) -> int:
             still_pending=len(_failed),
         )
         return delivered
-    except Exception as exc:  # noqa: BLE001 - наружу не должно выйти ничего
+    except Exception as exc:
         logger.error("notification_retry_error", error=type(exc).__name__)
         return 0
 

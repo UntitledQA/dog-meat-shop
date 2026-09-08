@@ -37,7 +37,12 @@ async def list_orders(
     orders, total = await order_service.list_admin_orders(
         session, status=order_status, limit=limit, offset=offset
     )
-    return Page[AdminOrderOut](items=orders, total=total, limit=limit, offset=offset)
+    return Page[AdminOrderOut](
+        items=[AdminOrderOut.model_validate(o) for o in orders],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(

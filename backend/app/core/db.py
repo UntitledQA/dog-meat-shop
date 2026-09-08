@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
@@ -27,7 +32,9 @@ def _engine_kwargs(url: str) -> dict:
     }
 
 
-engine: AsyncEngine = create_async_engine(settings.database_url, **_engine_kwargs(settings.database_url))
+engine: AsyncEngine = create_async_engine(
+    settings.database_url, **_engine_kwargs(settings.database_url)
+)
 
 SessionLocal = async_sessionmaker(
     bind=engine,

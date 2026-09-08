@@ -72,23 +72,36 @@ def _coerce_decimal(value: Any) -> Any:
     return value
 
 
+#: Границы столбцов Numeric(10, 2) и Numeric(10, 3): 10 значащих цифр всего.
+#: Без явной проверки значение вроде 999999999999 проходит валидацию и падает уже
+#: в БД (DataError -> 500), поэтому отсекаем его здесь и отвечаем 422.
+MAX_MONEY = Decimal("99999999.99")
+MAX_WEIGHT = Decimal("9999999.999")
+
+
 def _money(value: Decimal) -> Decimal:
-    return round_money(value)
+    result = round_money(value)
+    if abs(result) > MAX_MONEY:
+        raise ValueError(f"Сумма не может превышать {MAX_MONEY}")
+    return result
 
 
 def _weight(value: Decimal) -> Decimal:
-    return round_weight(value)
+    result = round_weight(value)
+    if abs(result) > MAX_WEIGHT:
+        raise ValueError(f"Вес не может превышать {MAX_WEIGHT} кг")
+    return result
 
 
 def _non_negative_money(value: Decimal) -> Decimal:
-    result = round_money(value)
+    result = _money(value)
     if result < 0:
         raise ValueError("Сумма не может быть отрицательной")
     return result
 
 
 def _non_negative_weight(value: Decimal) -> Decimal:
-    result = round_weight(value)
+    result = _weight(value)
     if result < 0:
         raise ValueError("Вес не может быть отрицательным")
     return result

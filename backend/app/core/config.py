@@ -6,7 +6,7 @@ from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -70,6 +70,24 @@ class Settings(BaseSettings):
     def _parse_delivery_price(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return Decimal("0")
+        return value
+
+    @field_validator(
+        "dev_telegram_id",
+        "init_data_ttl_seconds",
+        "max_upload_size_mb",
+        mode="before",
+    )
+    @classmethod
+    def _empty_int_means_default(cls, value: object, info: ValidationInfo) -> object:
+        """Пустая переменная в .env не должна ронять приложение.
+
+        `DEV_TELEGRAM_ID=` (оператор стёр значение) раньше приводил к падению на
+        импорте с сырым трейсбеком pydantic. Пустая строка = «значение не задано»,
+        то есть берётся значение по умолчанию.
+        """
+        if isinstance(value, str) and not value.strip() and info.field_name:
+            return cls.model_fields[info.field_name].default
         return value
 
     @property

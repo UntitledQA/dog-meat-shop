@@ -114,12 +114,13 @@ export function CheckoutPage() {
   useEffect(() => {
     if (!me) return;
     setValues((current) => {
-      const next = { ...current };
-      if (current.phone.trim() === '' && me.phone) next.phone = me.phone;
-      if (current.customerName.trim() === '') {
-        next.customerName = [me.first_name, me.last_name].filter(Boolean).join(' ').trim();
-      }
-      return next;
+      const phone = current.phone.trim() === '' && me.phone ? me.phone : current.phone;
+      const profileName = [me.first_name, me.last_name].filter(Boolean).join(' ').trim();
+      const customerName =
+        current.customerName.trim() === '' ? profileName : current.customerName;
+
+      if (phone === current.phone && customerName === current.customerName) return current;
+      return { ...current, phone, customerName };
     });
   }, [me]);
 

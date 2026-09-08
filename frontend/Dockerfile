@@ -29,8 +29,9 @@ RUN if [ -f package-lock.json ]; then \
 
 COPY . .
 
-# Базовый URL API: пустой/относительный, потому что nginx проксирует /api на backend.
-ARG VITE_API_BASE_URL=/api/v1
+# Origin API. Пусто: nginx отдаёт SPA и проксирует /api и /uploads на backend,
+# а префикс /api/v1 клиент подставляет сам (frontend/src/api/client.ts).
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 RUN npm run build

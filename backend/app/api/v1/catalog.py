@@ -31,7 +31,12 @@ async def list_catalog(
     offset: OffsetQuery = 0,
 ) -> Page[ProductOut]:
     products, total = await catalog_service.list_catalog(session, limit=limit, offset=offset)
-    return Page[ProductOut](items=products, total=total, limit=limit, offset=offset)
+    return Page[ProductOut](
+        items=[ProductOut.model_validate(p) for p in products],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(

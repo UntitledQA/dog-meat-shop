@@ -12,16 +12,31 @@ from tests.conftest import order_payload
 PREFIX = "/api/v1"
 
 
-async def _stock(session, product_id: int) -> Decimal:
-    session.expire_all()
-    product = await session.scalar(select(Product).where(Product.id == product_id))
-    return Decimal(str(product.stock_kg))
+async def _stock(session_factory, product_id: int) -> Decimal:
+    """Читает остаток из БД в отдельной сессии.
+
+    Отдельная сессия принципиальна: общая сессия теста держит свою identity map
+    и свою транзакцию, поэтому не увидела бы изменения, закоммиченные внутри
+    HTTP-запроса.
+    """
+    async with session_factory() as check:
+        value = (
+            await check.execute(select(Product.stock_kg).where(Product.id == product_id))
+        ).scalar_one()
+    return Decimal(str(value))
 
 
-async def _status(session, order_id: int) -> OrderStatus:
-    session.expire_all()
-    order = await session.scalar(select(Order).where(Order.id == order_id))
-    return order.status
+async def _status(session_factory, order_id: int) -> OrderStatus:
+    async with session_factory() as check:
+        value = (await check.execute(select(Order.status).where(Order.id == order_id))).scalar_one()
+    return OrderStatus(value)
+
+
+async def _restored_at(session_factory, order_id: int):
+    async with session_factory() as check:
+        return (
+            await check.execute(select(Order.stock_restored_at).where(Order.id == order_id))
+        ).scalar_one()
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +44,9 @@ async def _status(session, order_id: int) -> OrderStatus:
 # ---------------------------------------------------------------------------
 
 
-async def test_stock_decreases_after_order(client, user_headers, make_product, session) -> None:
+async def test_stock_decreases_after_order(
+    client, user_headers, make_product, session_factory
+) -> None:
     product = await make_product(stock_kg="10.0")
 
     response = await client.post(
@@ -37,10 +54,12 @@ async def test_stock_decreases_after_order(client, user_headers, make_product, s
     )
 
     assert response.status_code == 201
-    assert await _stock(session, product.id) == Decimal("7.500")
+    assert await _stock(session_factory, product.id) == Decimal("7.500")
 
 
-async def test_stock_decreases_for_each_item(client, user_headers, make_product, session) -> None:
+async def test_stock_decreases_for_each_item(
+    client, user_headers, make_product, session_factory
+) -> None:
     beef = await make_product(name="Говядина", stock_kg="10.0")
     turkey = await make_product(name="Индейка", stock_kg="5.0")
 
@@ -51,11 +70,13 @@ async def test_stock_decreases_for_each_item(client, user_headers, make_product,
     ]
     await client.post(f"{PREFIX}/orders", json=payload, headers=user_headers)
 
-    assert await _stock(session, beef.id) == Decimal("9.000")
-    assert await _stock(session, turkey.id) == Decimal("4.500")
+    assert await _stock(session_factory, beef.id) == Decimal("9.000")
+    assert await _stock(session_factory, turkey.id) == Decimal("4.500")
 
 
-async def test_order_can_take_entire_stock(client, user_headers, make_product, session) -> None:
+async def test_order_can_take_entire_stock(
+    client, user_headers, make_product, session_factory
+) -> None:
     product = await make_product(stock_kg="3.0")
 
     response = await client.post(
@@ -63,7 +84,7 @@ async def test_order_can_take_entire_stock(client, user_headers, make_product, s
     )
 
     assert response.status_code == 201
-    assert await _stock(session, product.id) == Decimal("0.000")
+    assert await _stock(session_factory, product.id) == Decimal("0.000")
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +92,9 @@ async def test_order_can_take_entire_stock(client, user_headers, make_product, s
 # ---------------------------------------------------------------------------
 
 
-async def test_order_above_stock_is_rejected(client, user_headers, make_product, session) -> None:
+async def test_order_above_stock_is_rejected(
+    client, user_headers, make_product, session_factory
+) -> None:
     product = await make_product(name="Говядина", stock_kg="1.5")
 
     response = await client.post(
@@ -88,12 +111,10 @@ async def test_order_above_stock_is_rejected(client, user_headers, make_product,
     assert problem["requested_kg"] == "3.000"
     assert problem["available_kg"] == "1.500"
     # Остаток не тронут.
-    assert await _stock(session, product.id) == Decimal("1.500")
+    assert await _stock(session_factory, product.id) == Decimal("1.500")
 
 
-async def test_out_of_stock_product_cannot_be_ordered(
-    client, user_headers, make_product
-) -> None:
+async def test_out_of_stock_product_cannot_be_ordered(client, user_headers, make_product) -> None:
     product = await make_product(stock_kg="0")
 
     response = await client.post(
@@ -121,7 +142,7 @@ async def test_all_problem_items_are_reported(client, user_headers, make_product
 
 
 async def test_second_order_cannot_exceed_remaining_stock(
-    client, user_headers, make_product, session
+    client, user_headers, make_product, session_factory
 ) -> None:
     """Последовательные заказы не могут суммарно превысить остаток."""
     product = await make_product(stock_kg="2.0")
@@ -135,11 +156,11 @@ async def test_second_order_cannot_exceed_remaining_stock(
 
     assert first.status_code == 201
     assert second.status_code == 409
-    assert await _stock(session, product.id) == Decimal("0.500")
+    assert await _stock(session_factory, product.id) == Decimal("0.500")
 
 
 async def test_failed_order_does_not_create_record(
-    client, user_headers, make_product, session
+    client, user_headers, make_product, session_factory
 ) -> None:
     """Транзакция откатывается целиком: заказа нет, остаток на месте."""
     beef = await make_product(name="Говядина", stock_kg="10.0")
@@ -153,8 +174,8 @@ async def test_failed_order_does_not_create_record(
     response = await client.post(f"{PREFIX}/orders", json=payload, headers=user_headers)
 
     assert response.status_code == 409
-    assert await _stock(session, beef.id) == Decimal("10.000")
-    assert await _stock(session, turkey.id) == Decimal("0.100")
+    assert await _stock(session_factory, beef.id) == Decimal("10.000")
+    assert await _stock(session_factory, turkey.id) == Decimal("0.100")
     assert (await client.get(f"{PREFIX}/orders", headers=user_headers)).json()["total"] == 0
 
 
@@ -164,7 +185,7 @@ async def test_failed_order_does_not_create_record(
 
 
 async def test_cancel_restores_stock(
-    client, user_headers, admin_headers, make_product, session
+    client, user_headers, admin_headers, make_product, session_factory
 ) -> None:
     product = await make_product(stock_kg="10.0")
     order = (
@@ -172,7 +193,7 @@ async def test_cancel_restores_stock(
             f"{PREFIX}/orders", json=order_payload(product.id, "2.0"), headers=user_headers
         )
     ).json()
-    assert await _stock(session, product.id) == Decimal("8.000")
+    assert await _stock(session_factory, product.id) == Decimal("8.000")
 
     response = await client.patch(
         f"{PREFIX}/admin/orders/{order['id']}/status",
@@ -182,11 +203,11 @@ async def test_cancel_restores_stock(
 
     assert response.status_code == 200
     assert response.json()["status"] == "cancelled"
-    assert await _stock(session, product.id) == Decimal("10.000")
+    assert await _stock(session_factory, product.id) == Decimal("10.000")
 
 
 async def test_repeated_cancel_does_not_restore_stock_twice(
-    client, user_headers, admin_headers, make_product, session
+    client, user_headers, admin_headers, make_product, session_factory
 ) -> None:
     """Ключевое требование: повторная отмена не возвращает остаток второй раз."""
     product = await make_product(stock_kg="10.0")
@@ -202,7 +223,7 @@ async def test_repeated_cancel_does_not_restore_stock_twice(
         headers=admin_headers,
     )
     assert first.status_code == 200
-    assert await _stock(session, product.id) == Decimal("10.000")
+    assert await _stock(session_factory, product.id) == Decimal("10.000")
 
     for _ in range(3):
         again = await client.patch(
@@ -214,11 +235,11 @@ async def test_repeated_cancel_does_not_restore_stock_twice(
         assert again.json()["status"] == "cancelled"
 
     # Остаток ровно исходный, а не 12, 14 или 16.
-    assert await _stock(session, product.id) == Decimal("10.000")
+    assert await _stock(session_factory, product.id) == Decimal("10.000")
 
 
 async def test_cancel_sets_stock_restored_marker(
-    client, user_headers, admin_headers, make_product, session
+    client, user_headers, admin_headers, make_product, session_factory
 ) -> None:
     product = await make_product(stock_kg="5.0")
     order = (
@@ -233,13 +254,11 @@ async def test_cancel_sets_stock_restored_marker(
         headers=admin_headers,
     )
 
-    session.expire_all()
-    stored = await session.scalar(select(Order).where(Order.id == order["id"]))
-    assert stored.stock_restored_at is not None
+    assert await _restored_at(session_factory, order["id"]) is not None
 
 
 async def test_cancel_after_progress_still_restores_once(
-    client, user_headers, admin_headers, make_product, session
+    client, user_headers, admin_headers, make_product, session_factory
 ) -> None:
     product = await make_product(stock_kg="10.0")
     order = (
@@ -254,7 +273,7 @@ async def test_cancel_after_progress_still_restores_once(
             json={"status": status_value},
             headers=admin_headers,
         )
-    assert await _stock(session, product.id) == Decimal("7.000")
+    assert await _stock(session_factory, product.id) == Decimal("7.000")
 
     await client.patch(
         f"{PREFIX}/admin/orders/{order['id']}/status",
@@ -262,7 +281,7 @@ async def test_cancel_after_progress_still_restores_once(
         headers=admin_headers,
     )
 
-    assert await _stock(session, product.id) == Decimal("10.000")
+    assert await _stock(session_factory, product.id) == Decimal("10.000")
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +290,7 @@ async def test_cancel_after_progress_still_restores_once(
 
 
 async def test_status_update_is_idempotent(
-    client, user_headers, admin_headers, make_product, session, notifications
+    client, user_headers, admin_headers, make_product, session_factory, notifications
 ) -> None:
     """Повторная установка того же статуса — no-op без уведомления."""
     product = await make_product(stock_kg="10.0")
@@ -297,7 +316,7 @@ async def test_status_update_is_idempotent(
 
     assert second.status_code == 200
     assert second.json()["status"] == "confirmed"
-    assert await _status(session, order["id"]) == OrderStatus.CONFIRMED
+    assert await _status(session_factory, order["id"]) == OrderStatus.CONFIRMED
     # Повторная установка не рассылает уведомление ещё раз.
     assert notifications.status_changes == []
 
@@ -343,7 +362,7 @@ async def test_invalid_transition_is_rejected(
 
 
 async def test_completed_order_cannot_be_cancelled(
-    client, user_headers, admin_headers, make_product, session
+    client, user_headers, admin_headers, make_product, session_factory
 ) -> None:
     product = await make_product(stock_kg="10.0")
     order = (
@@ -369,7 +388,7 @@ async def test_completed_order_cannot_be_cancelled(
 
     assert response.status_code == 409
     # Выполненный заказ не возвращает остаток.
-    assert await _stock(session, product.id) == Decimal("8.000")
+    assert await _stock(session_factory, product.id) == Decimal("8.000")
 
 
 async def test_unknown_status_is_rejected(
@@ -391,9 +410,7 @@ async def test_unknown_status_is_rejected(
     assert response.status_code == 422
 
 
-async def test_regular_user_cannot_change_status(
-    client, user_headers, make_product
-) -> None:
+async def test_regular_user_cannot_change_status(client, user_headers, make_product) -> None:
     product = await make_product(stock_kg="10.0")
     order = (
         await client.post(

@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Button, Photo } from './ui';
 import {
-  DEFAULT_MIN_WEIGHT,
-  clampWeight,
+  defaultAddWeight,
   formatPricePerKg,
   formatWeight,
   hasSellableStock,
@@ -14,11 +13,6 @@ export interface ProductCardProps {
   onAdd?: (product: Product, weightKg: string) => void;
   /** Идёт запрос — блокируем кнопку. */
   busy?: boolean;
-}
-
-/** Вес по умолчанию при добавлении из каталога: 1 кг или весь остаток. */
-export function defaultAddWeight(product: Product): string {
-  return clampWeight('1.000', { min: DEFAULT_MIN_WEIGHT, max: product.stock_kg });
 }
 
 export function ProductCard({ product, onAdd, busy = false }: ProductCardProps) {

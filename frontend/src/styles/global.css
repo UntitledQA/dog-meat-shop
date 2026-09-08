@@ -33,6 +33,11 @@
   --nav-height: 62px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
+  /* Реальная высота окна Telegram: подставляется из viewportStableHeight
+     (см. telegram/webapp.ts: syncViewportHeight). Внутри Telegram 100vh врёт —
+     на Android он равен высоте экрана, а не видимой области Mini App. */
+  --tg-viewport: 100dvh;
+
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     'Noto Sans', sans-serif;
 }
@@ -48,7 +53,21 @@ body {
   margin: 0;
   padding: 0;
   max-width: 100%;
-  overflow-x: hidden;
+  /* ВАЖНО: именно clip, а не hidden.
+     По спецификации, если одна ось не `visible`, вторая вычисляется в `auto` —
+     поэтому `overflow-x: hidden` молча превращал html, body и #root в
+     scroll-контейнеры. Они не прокручивались сами (высота росла по контенту),
+     но перехватывали колесо мыши и не пропускали его к вьюпорту: на десктопе
+     страница двигалась только перетаскиванием полосы справа.
+     `clip` убирает горизонтальную прокрутку, не создавая scroll-контейнер. */
+  overflow-x: hidden; /* фолбэк для движков без поддержки clip */
+  overflow-x: clip;
+}
+
+html {
+  /* Гасим цепочку прокрутки только на реальном скроллящемся элементе.
+     На body это же свойство блокировало бы передачу колеса вьюпорту. */
+  overscroll-behavior-y: contain;
 }
 
 body {
@@ -59,16 +78,15 @@ body {
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
-  overscroll-behavior-y: none;
 }
 
 #root {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: var(--tg-viewport);
   display: flex;
   flex-direction: column;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: hidden; /* фолбэк */
+  overflow-x: clip;
 }
 
 img {
@@ -121,8 +139,9 @@ p {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  min-height: 100vh;
-  min-height: 100dvh;
+  /* Собственный min-height не нужен: высоту задаёт #root, а flex растягивает
+     оболочку. Раньше здесь стоял ещё один 100dvh, и два «полных экрана»
+     вкладывались друг в друга, создавая лишнюю прокрутку. */
   width: 100%;
 }
 
@@ -958,6 +977,69 @@ p {
   background: rgba(0, 0, 0, 0.5);
   color: #ffffff;
   font-size: 14px;
+}
+
+/* ------------------------------- Админ-панель ------------------------------ */
+
+.admin-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.admin-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 104px;
+  padding: var(--space-4);
+  background: var(--section);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.admin-tile:active {
+  background: var(--surface);
+}
+
+.admin-tile__icon {
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.admin-tile__title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.admin-tile__hint {
+  font-size: 12px;
+  color: var(--hint);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stat__label {
+  font-size: 12px;
+  color: var(--hint);
+}
+
+.stat__value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .visually-hidden {

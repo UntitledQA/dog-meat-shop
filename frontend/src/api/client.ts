@@ -10,8 +10,19 @@
 import { getInitData } from '../telegram/webapp';
 import type { ApiErrorPayload, InsufficientStockItem } from './types';
 
-/** Базовый URL API. Пустая строка = тот же origin (dev-прокси Vite). */
-export const API_BASE_URL: string = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+/**
+ * Базовый URL API — только origin. Пустая строка = тот же origin (dev-прокси Vite).
+ *
+ * Префикс `/api/v1` добавляет `API_PREFIX`, поэтому в `VITE_API_BASE_URL` его быть
+ * не должно. Частая ошибка в конфигурации — записать туда `/api/v1` и получить
+ * `/api/v1/api/v1/catalog`, поэтому лишний префикс здесь срезается принудительно.
+ */
+export function normalizeBaseUrl(raw: string | undefined | null): string {
+  const trimmed = (raw ?? '').trim().replace(/\/+$/, '');
+  return trimmed.replace(/\/api\/v1$/, '');
+}
+
+export const API_BASE_URL: string = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 /** Telegram-id для dev-режима без Telegram (бэкенд: DEV_AUTH_ENABLED=true). */
 const DEV_TELEGRAM_ID: string = import.meta.env.VITE_DEV_TELEGRAM_ID ?? '';

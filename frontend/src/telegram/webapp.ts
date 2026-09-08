@@ -204,8 +204,67 @@ export function showAlert(message: string): void {
   }
 }
 
+/**
+ * Отключает вертикальные свайпы Telegram (Bot API 7.7+).
+ *
+ * На Android свайп вниз внутри Mini App по умолчанию тянет и закрывает окно,
+ * а не прокручивает содержимое — из-за этого список товаров «не скроллится».
+ * В старых клиентах метода нет, поэтому вызов защищён проверкой.
+ */
+export function disableVerticalSwipes(): void {
+  const app = getWebApp();
+  if (app && typeof app.disableVerticalSwipes === 'function') {
+    try {
+      app.disableVerticalSwipes();
+    } catch (error) {
+      console.warn('Telegram.WebApp.disableVerticalSwipes() недоступен', error);
+    }
+  }
+}
+
+/**
+ * Прокидывает реальную высоту окна Telegram в CSS-переменную `--tg-viewport`.
+ *
+ * `100vh` внутри Telegram врёт: на Android он равен высоте экрана, а не
+ * видимой области Mini App, поэтому вёрстка оказывается выше окна и появляется
+ * «фантомная» прокрутка. `viewportStableHeight` — высота без учёта клавиатуры
+ * и панелей, именно её и нужно использовать.
+ *
+ * Возвращает функцию отписки.
+ */
+export function syncViewportHeight(): () => void {
+  if (typeof document === 'undefined') return () => {};
+
+  const apply = (): void => {
+    const app = getWebApp();
+    const height = app?.viewportStableHeight || app?.viewportHeight;
+    const root = document.documentElement;
+    if (height && height > 0) {
+      root.style.setProperty('--tg-viewport', `${height}px`);
+    } else {
+      // Вне Telegram полагаемся на CSS-фолбэк (100dvh).
+      root.style.removeProperty('--tg-viewport');
+    }
+  };
+
+  apply();
+  const off = onEvent('viewportChanged', apply);
+  window.addEventListener('resize', apply);
+  window.addEventListener('orientationchange', apply);
+
+  return () => {
+    off();
+    window.removeEventListener('resize', apply);
+    window.removeEventListener('orientationchange', apply);
+  };
+}
+
 /** Инициализация при старте приложения. */
-export function initTelegram(): void {
+export function initTelegram(): () => void {
   ready();
   expand();
+  // Порядок важен: сначала разворачиваем окно, потом снимаем жест закрытия,
+  // иначе Telegram может вернуть свайпы при первом же expand().
+  disableVerticalSwipes();
+  return syncViewportHeight();
 }

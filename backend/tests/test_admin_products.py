@@ -5,6 +5,8 @@ from __future__ import annotations
 import io
 import struct
 
+import pytest
+
 PREFIX = "/api/v1"
 
 
@@ -278,7 +280,7 @@ async def test_admin_uploads_jpeg_photo(client, admin_headers) -> None:
         headers=admin_headers,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json()["photo_url"].startswith("/uploads/")
 
 
@@ -353,3 +355,194 @@ async def test_update_missing_product_returns_404(client, admin_headers) -> None
     )
 
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Устойчивость к «плохому» вводу: 422, а не 500
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("field", ["name", "price_per_kg", "stock_kg", "is_active"])
+async def test_explicit_null_on_required_field_returns_422(
+    client, admin_headers, make_product, field: str
+) -> None:
+    """Регрессия: явный null доходил до UPDATE и падал как IntegrityError (500)."""
+    product = await make_product()
+
+    response = await client.patch(
+        f"{PREFIX}/admin/products/{product.id}",
+        json={field: None},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+@pytest.mark.parametrize("field", ["description", "photo_url"])
+async def test_explicit_null_clears_optional_field(
+    client, admin_headers, make_product, field: str
+) -> None:
+    """Обнуляемые поля по-прежнему можно очистить явным null."""
+    product = await make_product(description="Было описание", photo_url="/uploads/a.jpg")
+
+    response = await client.patch(
+        f"{PREFIX}/admin/products/{product.id}",
+        json={field: None},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()[field] is None
+
+
+@pytest.mark.parametrize("value", ["1e1000", "NaN", "Infinity", "-Infinity", "1e400"])
+async def test_non_finite_price_returns_422(client, admin_headers, value: str) -> None:
+    """Регрессия: decimal.InvalidOperation — ArithmeticError, Pydantic его не ловил."""
+    response = await client.post(
+        f"{PREFIX}/admin/products",
+        json={"name": "Товар", "price_per_kg": value, "stock_kg": "1"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 422, f"{value} дал {response.status_code}"
+
+
+async def test_price_beyond_column_range_returns_422(client, admin_headers) -> None:
+    """Numeric(10,2) не вмещает 12 цифр — отсекаем до похода в БД."""
+    response = await client.post(
+        f"{PREFIX}/admin/products",
+        json={"name": "Товар", "price_per_kg": "999999999999", "stock_kg": "1"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 422
+
+
+async def test_stock_beyond_column_range_returns_422(client, admin_headers) -> None:
+    response = await client.post(
+        f"{PREFIX}/admin/products",
+        json={"name": "Товар", "price_per_kg": "100", "stock_kg": "99999999999"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Файлы на диске: §8 контракта
+# ---------------------------------------------------------------------------
+
+
+def _disk_path(photo_url: str):
+    from app.core.config import settings
+
+    return settings.upload_path / photo_url.rsplit("/", 1)[-1]
+
+
+async def test_uploaded_file_really_lands_on_disk(client, admin_headers) -> None:
+    response = await client.post(
+        f"{PREFIX}/admin/uploads/photo",
+        files={"file": ("photo.png", io.BytesIO(_png_bytes()), "image/png")},
+        headers=admin_headers,
+    )
+
+    assert _disk_path(response.json()["photo_url"]).exists()
+
+
+async def test_replacing_photo_deletes_the_old_file(
+    client, admin_headers, make_product
+) -> None:
+    """§8: старый файл удаляется, если больше нигде не используется."""
+    product = await make_product()
+
+    first_url = (
+        await client.post(
+            f"{PREFIX}/admin/products/{product.id}/photo",
+            files={"file": ("a.png", io.BytesIO(_png_bytes()), "image/png")},
+            headers=admin_headers,
+        )
+    ).json()["photo_url"]
+    assert _disk_path(first_url).exists()
+
+    second_url = (
+        await client.post(
+            f"{PREFIX}/admin/products/{product.id}/photo",
+            files={"file": ("b.jpg", io.BytesIO(_jpeg_bytes()), "image/jpeg")},
+            headers=admin_headers,
+        )
+    ).json()["photo_url"]
+
+    assert not _disk_path(first_url).exists(), "старый файл остался на диске"
+    assert _disk_path(second_url).exists(), "новый файл не сохранён"
+
+
+async def test_shared_photo_is_not_deleted_while_still_used(
+    client, admin_headers, make_product
+) -> None:
+    """Файл, на который ссылается другой товар, удалять нельзя."""
+    first = await make_product(name="Первый")
+    second = await make_product(name="Второй")
+
+    shared_url = (
+        await client.post(
+            f"{PREFIX}/admin/products/{first.id}/photo",
+            files={"file": ("shared.png", io.BytesIO(_png_bytes()), "image/png")},
+            headers=admin_headers,
+        )
+    ).json()["photo_url"]
+
+    # Второй товар начинает ссылаться на тот же файл.
+    await client.patch(
+        f"{PREFIX}/admin/products/{second.id}",
+        json={"photo_url": shared_url},
+        headers=admin_headers,
+    )
+
+    # Первый товар меняет фото — файл всё ещё нужен второму.
+    await client.post(
+        f"{PREFIX}/admin/products/{first.id}/photo",
+        files={"file": ("new.jpg", io.BytesIO(_jpeg_bytes()), "image/jpeg")},
+        headers=admin_headers,
+    )
+
+    assert _disk_path(shared_url).exists(), "удалён файл, который ещё используется"
+
+
+async def test_oversized_upload_returns_413(client, admin_headers) -> None:
+    """Превышение MAX_UPLOAD_SIZE_MB обрывается до записи на диск."""
+    from app.core.config import settings
+
+    before = set(settings.upload_path.iterdir())
+    huge = _png_bytes() + b"\x00" * (settings.max_upload_size_bytes + 1024)
+
+    response = await client.post(
+        f"{PREFIX}/admin/uploads/photo",
+        files={"file": ("huge.png", io.BytesIO(huge), "image/png")},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "file_too_large"
+    assert set(settings.upload_path.iterdir()) == before, "огромный файл всё-таки записан"
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["../../evil.png", r"..\..\evil.png", "/etc/passwd", "a/../../b.png"],
+)
+async def test_filename_cannot_escape_upload_dir(client, admin_headers, name: str) -> None:
+    """Имя файла приходит от клиента и никогда не используется как путь."""
+    from app.core.config import settings
+
+    response = await client.post(
+        f"{PREFIX}/admin/uploads/photo",
+        files={"file": (name, io.BytesIO(_png_bytes()), "image/png")},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 201
+    photo_url = response.json()["photo_url"]
+    assert ".." not in photo_url
+    saved = _disk_path(photo_url).resolve()
+    assert saved.parent == settings.upload_path.resolve(), "файл ушёл за пределы UPLOAD_DIR"

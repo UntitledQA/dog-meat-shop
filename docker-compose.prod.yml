@@ -1,0 +1,157 @@
+# Production-конфигурация для VPS. Самодостаточная: запускается вместо
+# docker-compose.yml, а не поверх него.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Отличия от локальной сборки:
+#   * впереди Caddy — сам получает и продлевает сертификат Let's Encrypt;
+#   * наружу открыты только 80 и 443, база и API доступны лишь внутри сети;
+#   * restart: always — сервисы поднимаются после перезагрузки сервера;
+#   * пароль базы обязателен и берётся из окружения без значения по умолчанию.
+
+name: dogmeat
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: dogmeat-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?укажите POSTGRES_USER в .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?укажите POSTGRES_PASSWORD в .env}
+      POSTGRES_DB: ${POSTGRES_DB:?укажите POSTGRES_DB в .env}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Порт наружу НЕ публикуется: база доступна только контейнерам в сети.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    stop_grace_period: 30s
+    networks: [dogmeat]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: dogmeat-backend:prod
+    container_name: dogmeat-backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      ENVIRONMENT: production
+      DEV_AUTH_ENABLED: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      UPLOAD_DIR: /app/uploads
+      RUN_MIGRATIONS: "true"
+    # entrypoint.sh: ждёт БД -> alembic upgrade head -> exec команды
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "2"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - ${TRUSTED_PROXY_IPS:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status == 200 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    stop_grace_period: 30s
+    networks: [dogmeat]
+
+  bot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: dogmeat-backend:prod
+    container_name: dogmeat-bot
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      ENVIRONMENT: production
+      DEV_AUTH_ENABLED: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      UPLOAD_DIR: /app/uploads
+      # Миграции уже применил backend — второй раз не нужно.
+      RUN_MIGRATIONS: "false"
+    command: ["python", "-m", "app.bot_main"]
+    volumes:
+      - uploads:/app/uploads
+    stop_grace_period: 30s
+    networks: [dogmeat]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Пусто: тот же origin, nginx проксирует /api и /uploads на backend.
+        VITE_API_BASE_URL: ""
+    image: dogmeat-frontend:prod
+    container_name: dogmeat-frontend
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Порт наружу НЕ публикуется: снаружи стоит Caddy.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    stop_grace_period: 15s
+    networks: [dogmeat]
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: dogmeat-caddy
+    restart: always
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:?укажите DOMAIN в .env, например shop.example.com}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    stop_grace_period: 15s
+    networks: [dogmeat]
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:
+
+networks:
+  dogmeat:
+    driver: bridge

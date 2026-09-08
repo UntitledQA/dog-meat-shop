@@ -9,9 +9,7 @@ from tests.conftest import order_payload
 PREFIX = "/api/v1"
 
 
-async def test_create_order_returns_201_and_snapshot(
-    client, user_headers, make_product
-) -> None:
+async def test_create_order_returns_201_and_snapshot(client, user_headers, make_product) -> None:
     product = await make_product(name="Говядина", price_per_kg="890.00", stock_kg="10.0")
 
     response = await client.post(

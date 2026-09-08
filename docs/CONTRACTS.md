@@ -104,16 +104,20 @@ created_at, updated_at)`
 `order_items(id, order_id FK CASCADE, product_id FK SET NULL, product_name, weight_kg,
 price_per_kg, line_total)`
 
-`notification_outbox(id, event_key UNIQUE, recipient_telegram_id, event_type, payload JSON,
-attempts, next_attempt_at, sent_at, last_error, created_at, updated_at)`
+Других таблиц в MVP нет. Уведомления Telegram **не** хранятся в БД (см. ниже).
 
 * `OrderStatus`: `new | confirmed | preparing | delivering | completed | cancelled`
 * `DeliveryType`: `delivery | pickup`
 * `order_number` = `ORD-YYYYMMDD-NNNNN` (NNNNN — id заказа с ведущими нулями): уникально без гонок.
 * `stock_restored_at` — метка возврата остатка, гарантирует однократность возврата.
-* Outbox-событие создаётся в бизнес-транзакции заказа/статуса. Успешная отправка ставит
-  `sent_at`; ошибка увеличивает `attempts`, сохраняет безопасный `last_error` и назначает
-  `next_attempt_at`. Уникальный `event_key` исключает дубли при идемпотентном статусе.
+
+### Доставка уведомлений
+
+Недоставленные сообщения складываются в **очередь в памяти процесса**
+(`deque(maxlen=500)` в `app/services/notification_service.py`), повторная отправка —
+`await retry_failed()`. Осознанное ограничение MVP: очередь не переживает рестарт и не
+общая для нескольких воркеров. Полноценный transactional outbox в БД — задача после MVP;
+интерфейс `notify_new_order` / `notify_order_status_changed` при этом не изменится.
 
 ## 6. Правила расчёта
 

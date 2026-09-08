@@ -8,8 +8,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -20,8 +18,8 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-_bot: Optional[Bot] = None
-_dispatcher: Optional[Dispatcher] = None
+_bot: Bot | None = None
+_dispatcher: Dispatcher | None = None
 
 
 def _build_bot(token: str) -> Bot:

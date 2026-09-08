@@ -248,3 +248,8 @@ export function hasSellableStock(
 ): boolean {
   return toGrams(stockKg) >= toGrams(minWeight);
 }
+
+/** Вес по умолчанию при добавлении из каталога: 1 кг или весь остаток. */
+export function defaultAddWeight(product: { stock_kg: string }): string {
+  return clampWeight('1.000', { min: DEFAULT_MIN_WEIGHT, max: product.stock_kg });
+}

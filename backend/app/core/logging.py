@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
+from collections.abc import MutableMapping
 from typing import Any
 
 import structlog
@@ -29,7 +30,9 @@ SENSITIVE_KEYS = {
 _TOKEN_RE = re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{30,}\b")
 
 
-def _redact(_logger: Any, _name: str, event_dict: dict) -> dict:
+def _redact(
+    _logger: Any, _name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     for key in list(event_dict):
         if key.lower() in SENSITIVE_KEYS:
             event_dict[key] = "***"

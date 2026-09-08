@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.schemas.common import (
     MoneyDecimal,
@@ -52,8 +52,18 @@ class ProductCreate(BaseModel):
     is_active: bool = Field(default=True)
 
 
+#: Поля, которые в БД объявлены NOT NULL. Явный `null` для них — ошибка ввода,
+#: а не «оставить как есть»: без этой проверки запрос доходил до UPDATE и падал
+#: как IntegrityError, то есть 500 вместо понятного 422.
+_NOT_NULLABLE_FIELDS = ("name", "price_per_kg", "stock_kg", "is_active")
+
+
 class ProductUpdate(BaseModel):
-    """Частичное обновление товара: передаются только изменяемые поля."""
+    """Частичное обновление товара: передаются только изменяемые поля.
+
+    Отсутствие поля означает «не менять». Явный `null` допустим только для
+    `description` и `photo_url` — так поле очищается.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -63,6 +73,21 @@ class ProductUpdate(BaseModel):
     stock_kg: NonNegativeWeight | None = Field(default=None)
     photo_url: str | None = Field(default=None, max_length=512)
     is_active: bool | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _reject_explicit_nulls(self) -> ProductUpdate:
+        nulls = [
+            field
+            for field in _NOT_NULLABLE_FIELDS
+            if field in self.model_fields_set and getattr(self, field) is None
+        ]
+        if nulls:
+            listed = ", ".join(nulls)
+            raise ValueError(
+                f"Поля нельзя обнулить: {listed}. "
+                "Чтобы оставить значение прежним, не передавайте поле вовсе."
+            )
+        return self
 
 
 class ProductPhotoOut(BaseModel):

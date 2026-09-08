@@ -66,7 +66,9 @@ def _warn_once(url: str) -> None:
         )
 
 
-def open_button(text: str, path: str = "", startapp: str | None = None) -> InlineKeyboardButton | None:
+def open_button(
+    text: str, path: str = "", startapp: str | None = None
+) -> InlineKeyboardButton | None:
     """Кнопка открытия мини-приложения с безопасными запасными вариантами."""
     url = webapp_url(path)
 

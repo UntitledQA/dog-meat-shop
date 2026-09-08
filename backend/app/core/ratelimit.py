@@ -20,13 +20,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import math
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional
-from urllib.parse import parse_qsl
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -34,8 +32,9 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from app.core.config import settings
-from app.core.errors import error_response
+from app.core.errors import AppError, error_response
 from app.core.logging import get_logger
+from app.core.security import parse_and_verify_init_data
 
 logger = get_logger(__name__)
 
@@ -150,7 +149,7 @@ class SlidingWindowStore:
 
     def __init__(self) -> None:
         self._buckets: dict[str, _Bucket] = {}
-        self._lock: Optional[asyncio.Lock] = None
+        self._lock: asyncio.Lock | None = None
         self._lock_loop: object = None
         self._last_cleanup: float = 0.0
 
@@ -210,7 +209,11 @@ class SlidingWindowStore:
             oldest = sorted(self._buckets, key=lambda k: self._buckets[k].expires_at())[:overflow]
             for key in oldest:
                 del self._buckets[key]
-            logger.warning("rate_limit_store_overflow", dropped=len(oldest), kept=len(self._buckets))
+            logger.warning(
+                "rate_limit_store_overflow",
+                dropped=len(oldest),
+                kept=len(self._buckets),
+            )
 
     def reset(self) -> None:
         """Полная очистка (используется в тестах)."""
@@ -256,32 +259,32 @@ def scope_for_request(method: str, path: str) -> str | None:
 
 
 def _telegram_id_from_headers(request: Request) -> int | None:
-    """Достаёт telegram_id из заголовков БЕЗ проверки подписи.
+    """telegram_id для ключа лимитера — ТОЛЬКО из проверенного initData.
 
-    Это допустимо только как ключ корзины счётчиков: значение НИКОГДА не считается
-    подтверждённой личностью (авторизация — исключительно `app/api/deps.py`).
-    Подделка заголовка даёт злоумышленнику лишь собственную «свежую» корзину, что не
-    страшнее смены IP; полноценная защита от такого перебора — лимиты на прокси.
+    Произвольный заголовок вроде `X-Telegram-Id` здесь не принимается: подделать
+    его ничего не стоит, и злоумышленник получал бы свежую корзину счётчиков на
+    каждый запрос, полностью обходя лимит. Смена IP требует хотя бы сетевых
+    ресурсов, смена заголовка — нет. Требование зафиксировано в §4 контракта.
+
+    Подпись проверяется здесь повторно (HMAC-SHA256 — доли миллисекунды), потому
+    что middleware отрабатывает раньше зависимостей FastAPI.
     """
-    for header in ("X-Telegram-Id", "X-Dev-Telegram-Id"):
-        raw = request.headers.get(header)
-        if raw:
-            candidate = raw.strip()
-            if candidate.lstrip("-").isdigit() and len(candidate) <= 24:
-                return int(candidate)
-
     init_data = request.headers.get("X-Telegram-Init-Data")
-    if not init_data or len(init_data) > _MAX_INIT_DATA_LENGTH:
-        return None
-    try:
-        user_raw = dict(parse_qsl(init_data, keep_blank_values=True)).get("user")
-        if not user_raw:
+    if init_data and len(init_data) <= _MAX_INIT_DATA_LENGTH:
+        try:
+            verified = parse_and_verify_init_data(
+                init_data, settings.bot_token, settings.init_data_ttl_seconds
+            )
+        except AppError:
             return None
-        user = json.loads(user_raw)
-    except (ValueError, UnicodeDecodeError):
-        return None
-    if isinstance(user, dict) and isinstance(user.get("id"), int):
-        return int(user["id"])
+        return verified.telegram_id
+
+    # Dev-режим: заголовок и есть легальная личность, но только вне production.
+    if settings.dev_auth_allowed:
+        raw = (request.headers.get("X-Dev-Telegram-Id") or "").strip()
+        if raw.lstrip("-").isdigit() and len(raw) <= 24:
+            return int(raw)
+
     return None
 
 
@@ -378,11 +381,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 __all__ = [
-    "Limit",
     "RATE_LIMIT_ENABLED",
+    "TRUST_PROXY_HEADERS",
+    "Limit",
     "RateLimitMiddleware",
     "SlidingWindowStore",
-    "TRUST_PROXY_HEADERS",
     "client_ip",
     "limit_for_scope",
     "parse_limit",

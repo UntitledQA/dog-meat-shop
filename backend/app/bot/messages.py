@@ -8,9 +8,9 @@ Telegram, а в худшем случае позволяют подмешать 
 from __future__ import annotations
 
 import html
+from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal
-from typing import Iterable
 
 from app.core.config import settings
 from app.core.money import format_money, format_weight
@@ -202,7 +202,10 @@ STATUS_MESSAGES: dict[OrderStatus, str] = {
     OrderStatus.PREPARING: "Собираем и взвешиваем ваш заказ — скоро будет готов.",
     OrderStatus.DELIVERING: "Заказ передан курьеру и едет к вам. Пожалуйста, будьте на связи. 🚚",
     OrderStatus.COMPLETED: "Заказ выполнен. Спасибо, что заботитесь о своём питомце! 🐕",
-    OrderStatus.CANCELLED: "К сожалению, заказ отменён. Если это ошибка — напишите нам, поможем оформить заново.",
+    OrderStatus.CANCELLED: (
+        "К сожалению, заказ отменён. Если это ошибка — напишите нам, "
+        "поможем оформить заново."
+    ),
 }
 
 _STATUS_ICONS: dict[OrderStatus, str] = {

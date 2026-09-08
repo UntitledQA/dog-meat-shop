@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import { Page } from '../components/Layout';
 import { Button, EmptyState, ErrorState, LinkButton, Photo, Skeleton } from '../components/ui';
 import { WeightPicker } from '../components/WeightPicker';
-import { defaultAddWeight } from '../components/ProductCard';
 import { useToast } from '../components/ToastContext';
 import { ApiError, errorMessage } from '../api/client';
 import { useProduct, useSettings } from '../api/queries';
@@ -12,6 +11,7 @@ import {
   DEFAULT_MIN_WEIGHT,
   DEFAULT_WEIGHT_STEP,
   calcLineTotal,
+  defaultAddWeight,
   formatPrice,
   formatPricePerKg,
   formatWeight,

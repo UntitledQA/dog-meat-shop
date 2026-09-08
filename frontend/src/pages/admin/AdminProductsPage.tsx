@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Page } from '../../components/Layout';
 import { Button, EmptyState, ErrorState, LinkButton, ListSkeleton, Photo } from '../../components/ui';
@@ -10,14 +10,22 @@ import { formatPricePerKg, formatWeight, hasSellableStock } from '../../lib/mone
 import { haptic, showConfirm } from '../../telegram/webapp';
 
 const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 350;
 
 export function AdminProductsPage() {
   const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(PAGE_SIZE);
+
+  // Запрос уходит не на каждую букву, а когда пользователь остановился.
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const { data, isPending, isError, error, isFetching, refetch } = useAdminProducts({
     include_inactive: true,
-    search: search.trim() === '' ? undefined : search.trim(),
+    search: query === '' ? undefined : query,
     limit,
     offset: 0,
   });

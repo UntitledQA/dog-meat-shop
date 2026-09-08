@@ -107,6 +107,10 @@ export interface TelegramWebApp {
   setBackgroundColor?(color: string): void;
   enableClosingConfirmation?(): void;
   disableClosingConfirmation?(): void;
+  /** Bot API 7.7+. Отключает жест «смахнуть вниз, чтобы закрыть». */
+  disableVerticalSwipes?(): void;
+  enableVerticalSwipes?(): void;
+  isVerticalSwipesEnabled?: boolean;
 }
 
 declare global {

@@ -1,0 +1,37 @@
+# Caddy сам получает и продлевает сертификат Let's Encrypt для {$DOMAIN}.
+# Нужны открытые порты 80 и 443 и A-запись домена на IP сервера.
+
+{
+	email {$LETSENCRYPT_EMAIL}
+	# Для отладки выпуска сертификата раскомментируйте staging-каталог,
+	# иначе при ошибках быстро упрётесь в лимиты Let's Encrypt:
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Всё отдаёт nginx-контейнер frontend: он же проксирует /api и /uploads
+	# на backend, поэтому Mini App работает с одного origin.
+	reverse_proxy frontend:80 {
+		# Перезаписываем, а не дополняем: клиентский X-Forwarded-For доверять нельзя.
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
+	}
+
+	header {
+		# Mini App открывается внутри Telegram, поэтому фрейминг не запрещаем
+		# целиком, но ограничиваем источники.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

@@ -1,0 +1,28 @@
+# Нормализация переводов строк.
+# Проект разрабатывается на Windows, а разворачивается в Linux-контейнерах,
+# поэтому в репозитории всё хранится с LF.
+* text=auto eol=lf
+
+# Файлы, которым CRLF смертелен: shell-скрипты запускаются внутри контейнера,
+# и `#!/bin/sh` с \r приводит к «bad interpreter».
+*.sh            text eol=lf
+entrypoint.sh   text eol=lf
+Dockerfile      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+Caddyfile       text eol=lf
+*.conf          text eol=lf
+
+# Windows-специфичные файлы оставляем с CRLF.
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.ps1           text eol=crlf
+
+# Бинарные файлы не трогаем.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.webp          binary
+*.ico           binary
+*.gz            binary
+*.db            binary

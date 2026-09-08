@@ -40,7 +40,12 @@ async def list_products(
         limit=limit,
         offset=offset,
     )
-    return Page[ProductOut](items=products, total=total, limit=limit, offset=offset)
+    return Page[ProductOut](
+        items=[ProductOut.model_validate(p) for p in products],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post(

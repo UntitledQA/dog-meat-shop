@@ -10,6 +10,10 @@
 
 ---
 
+> **Нужно, чтобы работало круглосуточно и без вашего компьютера?**
+> Пошаговая инструкция по переносу на VPS с доменом, HTTPS и бэкапами —
+> в [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ## Содержание
 
 1. [Возможности](#возможности)
@@ -32,6 +36,7 @@
 18. [Диагностика проблем](#диагностика-проблем)
 19. [Ограничения MVP](#ограничения-mvp)
 20. [Рекомендации для production](#рекомендации-для-production)
+21. **[Развёртывание на сервере](docs/DEPLOY.md)** — чтобы магазин работал с выключенным домашним ПК
 
 ---
 
@@ -186,6 +191,12 @@ docker compose up --build
 > Порт базы — **5433**, а не 5432, чтобы не конфликтовать с PostgreSQL,
 > установленным на машине локально. Изменить можно переменной `DB_PORT` в `.env`.
 > Порты backend и frontend меняются переменными `BACKEND_PORT` и `FRONTEND_PORT`.
+>
+> **Безопасность по умолчанию:** PostgreSQL и backend публикуются только на `127.0.0.1`
+> (`DB_BIND`, `BACKEND_BIND`). Наружу смотрит лишь nginx-контейнер `frontend`. Не меняйте
+> это на `0.0.0.0`: прямой доступ к backend позволяет подделать `X-Forwarded-For` и обойти
+> rate limiting, а у базы слабый пароль по умолчанию. Для доступа с другой машины
+> используйте SSH-туннель.
 
 **4. Откройте**
 
@@ -517,6 +528,9 @@ docker compose up -d --force-recreate backend bot   # Docker
 | `DB_PORT`               | Порт PostgreSQL на хосте (только Compose)                                  | `5433`                                                    | нет (`5433`) |
 | `BACKEND_PORT`          | Порт backend на хосте (только Compose)                                     | `8000`                                                    | нет (`8000`) |
 | `FRONTEND_PORT`         | Порт frontend на хосте (только Compose)                                    | `5173`                                                    | нет (`5173`) |
+| `DB_BIND`               | Интерфейс публикации PostgreSQL (только Compose)                           | `127.0.0.1`                                               | нет (`127.0.0.1`) |
+| `BACKEND_BIND`          | Интерфейс публикации backend (только Compose)                              | `127.0.0.1`                                               | нет (`127.0.0.1`) |
+| `TRUSTED_PROXY_IPS`     | Кому uvicorn доверяет `X-Forwarded-*` (только Compose)                     | `172.16.0.0/12,...`                                       | нет |
 | `VITE_API_BASE_URL`     | Базовый путь API в сборке фронтенда                                        | `/api/v1`                                                 | нет (`/api/v1`) |
 | `TZ`                    | Часовой пояс контейнеров                                                   | `Europe/Moscow`                                           | нет         |
 
@@ -920,9 +934,14 @@ curl "https://api.telegram.org/bot$BOT_TOKEN/getWebhookInfo"   # провери�
 curl "https://api.telegram.org/bot$BOT_TOKEN/deleteWebhook"    # снять
 ```
 
-Приложение обязано сверять заголовок `X-Telegram-Bot-Api-Secret-Token` с `WEBHOOK_SECRET`
-и отбрасывать запросы с чужим значением. При webhook отдельный сервис `bot`
-в `docker-compose.yml` не нужен — апдейты принимает backend.
+Принимающий эндпоинт уже реализован: `POST {WEBHOOK_PATH}` в `app/main.py`. Он сверяет
+заголовок `X-Telegram-Bot-Api-Secret-Token` с `WEBHOOK_SECRET` через `hmac.compare_digest`,
+отдаёт `404` при `BOT_MODE=polling` и **требует непустой `WEBHOOK_SECRET` в production** —
+иначе адрес мог бы дёрнуть кто угодно. Поведение покрыто `backend/tests/test_webhook.py`.
+
+При webhook отдельный сервис `bot` в `docker-compose.yml` не нужен — апдейты принимает
+backend. Проще всего выставить webhook командой `BOT_MODE=webhook python -m app.bot_main`:
+она сама передаст Telegram нужный `secret_token`.
 
 ### Вынос файлов в объектное хранилище
 

@@ -31,7 +31,9 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       # Наружу отдаём 5433, чтобы не спорить с локально установленным PostgreSQL.
-      - "${DB_PORT:-5433}:5432"
+      # Только loopback: пароль по умолчанию слабый, а порт наружу открывал бы базу
+      # всей сети. Для удалённого доступа используйте SSH-туннель.
+      - "${DB_BIND:-127.0.0.1}:${DB_PORT:-5433}:5432"
     healthcheck:
       # backend стартует только после того, как эта проверка станет healthy.
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-meat} -d ${POSTGRES_DB:-meat} -q"]
@@ -73,10 +75,16 @@ services:
       - --port
       - "8000"
       - --proxy-headers
+      # Доверяем заголовкам X-Forwarded-* только от nginx внутри сети compose.
+      # "*" здесь означало бы доверие любому пиру: при опубликованном порте это
+      # позволяет подделать свой IP и обойти лимитер.
       - --forwarded-allow-ips
-      - "*"
+      - ${TRUSTED_PROXY_IPS:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      # Только loopback: снаружи API доступен через nginx (frontend), который
+      # перезаписывает X-Forwarded-For и ограничивает размер тела запроса.
+      # Для доступа с других машин ставьте обратный прокси с TLS.
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
     volumes:
       - uploads:/app/uploads
     healthcheck:
@@ -130,8 +138,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Запросы идут на тот же origin, nginx проксирует /api и /uploads на backend.
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        # Пусто: тот же origin, nginx проксирует /api и /uploads на backend.
+        # Префикс /api/v1 добавляет сам клиент — здесь его быть не должно.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-""}
     image: dogmeat-frontend:local
     container_name: dogmeat-frontend
     restart: unless-stopped

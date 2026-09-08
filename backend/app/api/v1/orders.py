@@ -52,7 +52,12 @@ async def list_orders(
     orders, total = await order_service.list_user_orders(
         session, user, limit=limit, offset=offset
     )
-    return Page[OrderOut](items=orders, total=total, limit=limit, offset=offset)
+    return Page[OrderOut](
+        items=[OrderOut.model_validate(o) for o in orders],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(

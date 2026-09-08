@@ -49,7 +49,11 @@ os.environ["RATE_LIMIT_UPLOADS"] = "off"
 
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
+from sqlalchemy.ext.asyncio import (  # noqa: E402
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.core.db import Base, get_db  # noqa: E402
@@ -85,7 +89,7 @@ def build_init_data(
     data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs))
     secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
     signature = hmac.new(secret, data_check_string.encode(), hashlib.sha256).hexdigest()
-    return urlencode(pairs + [("hash", signature)])
+    return urlencode([*pairs, ("hash", signature)])
 
 
 def auth_headers(telegram_id: int, **kwargs: object) -> dict[str, str]:

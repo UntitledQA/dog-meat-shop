@@ -32,7 +32,12 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    orders: Mapped[list[Order]] = relationship(back_populates="user", lazy="selectin")
+    #: НЕ eager-загружается: пользователь читается на КАЖДОМ авторизованном запросе,
+    #: и `selectin` тянул бы всю историю заказов вместе с позициями даже там, где
+    #: заказы не нужны (`GET /settings` давал 3 запроса вместо 1). Заказы всегда
+    #: берутся через `OrderRepository`, поэтому обращение к связи — ошибка, и
+    #: `lazy="raise"` делает её громкой, а не молчаливым N+1.
+    orders: Mapped[list[Order]] = relationship(back_populates="user", lazy="raise")
 
     @property
     def display_name(self) -> str:

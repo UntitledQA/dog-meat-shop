@@ -151,9 +151,12 @@ def test_auth_limit_returns_429_with_retry_after(rl_client: TestClient) -> None:
 
 
 def test_limit_applies_per_telegram_id(rl_client: TestClient) -> None:
+    """Разные пользователи считаются отдельно — но только по проверенному initData."""
+    from tests.conftest import auth_headers
+
     url = f"{PREFIX}/auth/telegram"
-    first = {"X-Telegram-Id": "111"}
-    second = {"X-Telegram-Id": "222"}
+    first = auth_headers(111111111)
+    second = auth_headers(222222222)
 
     for _ in range(3):
         assert rl_client.post(url, headers=first).status_code == 200
@@ -161,6 +164,38 @@ def test_limit_applies_per_telegram_id(rl_client: TestClient) -> None:
 
     # Другой пользователь не должен страдать из-за соседа.
     assert rl_client.post(url, headers=second).status_code == 200
+
+
+def test_forged_telegram_id_header_does_not_reset_limit(rl_client: TestClient) -> None:
+    """Регрессия: подделка X-Telegram-Id давала свежую корзину и обходила лимит.
+
+    Ключ считается только по проверенной подписи, поэтому произвольный заголовок
+    не должен ни создавать новую корзину, ни подменять чужую.
+    """
+    from tests.conftest import auth_headers
+
+    url = f"{PREFIX}/auth/telegram"
+    real = auth_headers(555555555)
+
+    for _ in range(3):
+        assert rl_client.post(url, headers=real).status_code == 200
+    assert rl_client.post(url, headers=real).status_code == 429
+
+    for forged in ("1", "2", "999999", "-1"):
+        response = rl_client.post(url, headers={**real, "X-Telegram-Id": forged})
+        assert response.status_code == 429, (
+            f"подделка X-Telegram-Id={forged} обошла лимит"
+        )
+
+
+def test_unsigned_init_data_falls_back_to_ip(rl_client: TestClient) -> None:
+    """Битый initData не даёт личности: считаем по IP, а не выдаём новую корзину."""
+    url = f"{PREFIX}/auth/telegram"
+
+    for _ in range(3):
+        assert rl_client.post(url, headers={"X-Telegram-Init-Data": "garbage"}).status_code == 200
+    # Меняем «личность» — но подпись по-прежнему невалидна, ключ остаётся IP.
+    assert rl_client.post(url, headers={"X-Telegram-Init-Data": "other-garbage"}).status_code == 429
 
 
 def test_orders_limit_only_for_post(rl_client: TestClient) -> None:
@@ -291,7 +326,8 @@ def test_proxy_headers_ignored_by_default(rl_client: TestClient) -> None:
     url = f"{PREFIX}/auth/telegram"
 
     for index in range(3):
-        assert rl_client.post(url, headers={"X-Forwarded-For": f"10.0.0.{index}"}).status_code == 200
+        response = rl_client.post(url, headers={"X-Forwarded-For": f"10.0.0.{index}"})
+        assert response.status_code == 200
 
     response = rl_client.post(url, headers={"X-Forwarded-For": "10.0.0.99"})
     assert response.status_code == 429
@@ -304,7 +340,8 @@ def test_proxy_headers_used_when_trusted(
     url = f"{PREFIX}/auth/telegram"
 
     for _ in range(3):
-        assert rl_client.post(url, headers={"X-Forwarded-For": "10.0.0.1, 10.0.0.2"}).status_code == 200
+        response = rl_client.post(url, headers={"X-Forwarded-For": "10.0.0.1, 10.0.0.2"})
+        assert response.status_code == 200
     assert rl_client.post(url, headers={"X-Forwarded-For": "10.0.0.1"}).status_code == 429
 
     # Другой клиент за тем же прокси не заблокирован.
