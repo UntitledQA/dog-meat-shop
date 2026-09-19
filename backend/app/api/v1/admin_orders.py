@@ -64,9 +64,12 @@ async def get_order(
     response_model=AdminOrderOut,
     summary="Сменить статус заказа",
     description=(
-        "Переходы: new → confirmed → preparing → delivering → completed. "
-        "Отмена возможна из любого статуса, кроме completed и cancelled: остатки "
-        "возвращаются ровно один раз. Установка текущего статуса — no-op."
+        "Заказ создаётся сразу в статусе confirmed. Переходы: "
+        "самовывоз — confirmed → completed; доставка — confirmed → delivering → "
+        "completed (можно и сразу в completed). Статус delivering недоступен "
+        "заказам с самовывозом. Отмена возможна из любого статуса, кроме "
+        "completed и cancelled: остатки возвращаются ровно один раз. "
+        "Установка текущего статуса — no-op."
     ),
 )
 async def update_order_status(

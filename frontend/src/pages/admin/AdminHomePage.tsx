@@ -40,7 +40,8 @@ export function AdminHomePage() {
   const products = useAdminProducts({ include_inactive: true, limit: 1, offset: 0 });
   const activeProducts = useAdminProducts({ include_inactive: false, limit: 1, offset: 0 });
   const allOrders = useAdminOrders({ limit: 1, offset: 0 });
-  const newOrders = useAdminOrders({ status: 'new', limit: 1, offset: 0 });
+  // Заказ создаётся сразу подтверждённым — это и есть «требуют внимания».
+  const openOrders = useAdminOrders({ status: 'confirmed', limit: 1, offset: 0 });
 
   return (
     <Page title="Админ-панель">
@@ -57,7 +58,11 @@ export function AdminHomePage() {
               loading={activeProducts.isPending}
             />
             <Stat label="Заказов всего" value={allOrders.data?.total ?? 0} loading={allOrders.isPending} />
-            <Stat label="Новых заказов" value={newOrders.data?.total ?? 0} loading={newOrders.isPending} />
+            <Stat
+              label="Подтверждённых"
+              value={openOrders.data?.total ?? 0}
+              loading={openOrders.isPending}
+            />
           </div>
         </div>
 

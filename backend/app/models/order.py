@@ -29,10 +29,13 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 # native_enum=False -> VARCHAR + CHECK: одна и та же схема работает в PostgreSQL и SQLite.
+# create_constraint нужен явно: с SQLAlchemy 1.4 он по умолчанию False, и без него
+# колонка остаётся обычным VARCHAR, куда мимо приложения можно записать что угодно.
 ORDER_STATUS_ENUM = SAEnum(
     OrderStatus,
     name="order_status",
     native_enum=False,
+    create_constraint=True,
     length=20,
     values_callable=lambda enum: [member.value for member in enum],
 )
@@ -40,6 +43,7 @@ DELIVERY_TYPE_ENUM = SAEnum(
     DeliveryType,
     name="delivery_type",
     native_enum=False,
+    create_constraint=True,
     length=20,
     values_callable=lambda enum: [member.value for member in enum],
 )
@@ -61,7 +65,7 @@ class Order(Base):
     )
 
     status: Mapped[OrderStatus] = mapped_column(
-        ORDER_STATUS_ENUM, default=OrderStatus.NEW, nullable=False, index=True
+        ORDER_STATUS_ENUM, default=OrderStatus.CONFIRMED, nullable=False, index=True
     )
     delivery_type: Mapped[DeliveryType] = mapped_column(DELIVERY_TYPE_ENUM, nullable=False)
 

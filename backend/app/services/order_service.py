@@ -30,6 +30,7 @@ from app.models import (
     Product,
     User,
     can_transition,
+    is_allowed_for_delivery_type,
     status_label,
 )
 from app.repositories.order_repo import OrderRepository
@@ -197,7 +198,8 @@ async def create_order(session: AsyncSession, user: User, payload: OrderCreate) 
         order = Order(
             order_number="",
             user_id=user.id,
-            status=OrderStatus.NEW,
+            # Отдельного «нового» статуса нет: оформленный заказ сразу подтверждён.
+            status=OrderStatus.CONFIRMED,
             delivery_type=payload.delivery_type,
             customer_name=payload.customer_name,
             phone=payload.phone,
@@ -366,6 +368,13 @@ async def update_status(session: AsyncSession, order_id: int, new_status: OrderS
         raise InvalidStatusTransitionError(
             f"Нельзя перевести заказ из статуса «{status_label(order.status)}» "
             f"в «{status_label(new_status)}»"
+        )
+
+    # «Доставляется» бессмысленно для самовывоза: забирают сами, везти некому.
+    # Проверяем на бэкенде — то, что интерфейс не показывает кнопку, не защита.
+    if not is_allowed_for_delivery_type(new_status, order.delivery_type):
+        raise InvalidStatusTransitionError(
+            f"Статус «{status_label(new_status)}» не подходит заказу с самовывозом"
         )
 
     previous = order.status

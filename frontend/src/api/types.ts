@@ -53,13 +53,7 @@ export interface Product {
   updated_at: string;
 }
 
-export type OrderStatus =
-  | 'new'
-  | 'confirmed'
-  | 'preparing'
-  | 'delivering'
-  | 'completed'
-  | 'cancelled';
+export type OrderStatus = 'confirmed' | 'delivering' | 'completed' | 'cancelled';
 
 export type DeliveryType = 'delivery' | 'pickup';
 

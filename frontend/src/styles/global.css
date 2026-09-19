@@ -449,19 +449,9 @@ p {
   color: var(--hint);
 }
 
-.badge--new {
-  background: rgba(43, 124, 211, 0.16);
-  color: #2b7cd3;
-}
-
 .badge--confirmed {
   background: rgba(120, 88, 214, 0.16);
   color: #7858d6;
-}
-
-.badge--preparing {
-  background: rgba(230, 145, 30, 0.18);
-  color: #c97a10;
 }
 
 .badge--delivering {

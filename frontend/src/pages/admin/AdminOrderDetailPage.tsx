@@ -94,7 +94,7 @@ export function AdminOrderDetailPage() {
     );
   }
 
-  const transitions = allowedTransitions(order.status);
+  const transitions = allowedTransitions(order.status, order.delivery_type);
   const nextStatuses = transitions.filter((value) => value !== 'cancelled');
   const canCancel = transitions.includes('cancelled');
   const busy = updateStatus.isPending;

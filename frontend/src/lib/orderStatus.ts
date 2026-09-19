@@ -1,22 +1,18 @@
 /** Статусы заказа: подписи, цвета бейджей и допустимые переходы (раздел 6.7). */
 
-import type { OrderStatus } from '../api/types';
+import type { DeliveryType, OrderStatus } from '../api/types';
 
 export const ORDER_STATUSES: OrderStatus[] = [
-  'new',
   'confirmed',
-  'preparing',
   'delivering',
   'completed',
   'cancelled',
 ];
 
 const LABELS: Record<OrderStatus, string> = {
-  new: 'Новый',
   confirmed: 'Подтверждён',
-  preparing: 'Готовится',
   delivering: 'Доставляется',
-  completed: 'Выполнен',
+  completed: 'Готово',
   cancelled: 'Отменён',
 };
 
@@ -26,21 +22,27 @@ export function statusLabel(status: OrderStatus, fromServer?: string | null): st
   return LABELS[status] ?? status;
 }
 
-/** CSS-модификатор бейджа: badge--new и т. д. */
+/** CSS-модификатор бейджа: badge--confirmed и т. д. */
 export function statusModifier(status: OrderStatus): string {
   return 'badge--' + status;
 }
 
 /**
  * Допустимые следующие статусы.
- * new → confirmed → preparing → delivering → completed;
- * cancelled — из любого, кроме completed/cancelled.
+ *
+ * Самовывоз: подтверждён → готово.
+ * Доставка:  подтверждён → доставляется → готово (можно и сразу в готово).
+ * Отмена — из любого статуса, кроме готового и отменённого.
+ *
+ * «Доставляется» не предлагается самовывозу: забирают сами, везти некому.
+ * Это дублирует проверку бэкенда, а не заменяет её.
  */
-export function allowedTransitions(status: OrderStatus): OrderStatus[] {
+export function allowedTransitions(
+  status: OrderStatus,
+  deliveryType: DeliveryType,
+): OrderStatus[] {
   const chain: Record<OrderStatus, OrderStatus[]> = {
-    new: ['confirmed'],
-    confirmed: ['preparing'],
-    preparing: ['delivering'],
+    confirmed: deliveryType === 'delivery' ? ['delivering', 'completed'] : ['completed'],
     delivering: ['completed'],
     completed: [],
     cancelled: [],

@@ -48,8 +48,8 @@ const product: Product = {
 const order: Order = {
   id: 1,
   order_number: 'ORD-20260907-00001',
-  status: 'new',
-  status_label: 'Новый',
+  status: 'confirmed',
+  status_label: 'Подтверждён',
   delivery_type: 'delivery',
   customer_name: 'Иван',
   phone: '+79991234567',
@@ -206,7 +206,7 @@ describe('маршруты администратора', () => {
   it('/admin/orders — список заказов с фильтром', async () => {
     renderRoute('/admin/orders');
     expect(await screen.findByText('ORD-20260907-00001')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Новый' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Подтверждён' })).toBeInTheDocument();
   });
 
   it('/admin/orders/:id — управление статусом', async () => {

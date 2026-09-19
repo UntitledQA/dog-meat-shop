@@ -106,7 +106,10 @@ price_per_kg, line_total)`
 
 Других таблиц в MVP нет. Уведомления Telegram **не** хранятся в БД (см. ниже).
 
-* `OrderStatus`: `new | confirmed | preparing | delivering | completed | cancelled`
+* `OrderStatus`: `confirmed | delivering | completed | cancelled`
+  (подписи: «Подтверждён», «Доставляется», «Готово», «Отменён»).
+  Колонка — VARCHAR(20) + CHECK; enum объявлен с `create_constraint=True`,
+  без него SQLAlchemy 1.4+ ограничение не создаёт.
 * `DeliveryType`: `delivery | pickup`
 * `order_number` = `ORD-YYYYMMDD-NNNNN` (NNNNN — id заказа с ведущими нулями): уникально без гонок.
 * `stock_restored_at` — метка возврата остатка, гарантирует однократность возврата.
@@ -132,8 +135,12 @@ price_per_kg, line_total)`
 6. Отмена — транзакция с блокировкой заказа: если `status == cancelled` → возврат как есть
    (идемпотентно, остаток не возвращается повторно); иначе восстановить остатки,
    проставить `stock_restored_at`, статус `cancelled`.
-7. Переходы: `new → confirmed → preparing → delivering → completed`; `cancelled` — из любого,
-   кроме `completed`/`cancelled`. Установка того же статуса — no-op 200 без уведомления.
+7. Заказ создаётся сразу в статусе `confirmed` — отдельного «нового» нет.
+   Переходы: самовывоз `confirmed → completed`; доставка
+   `confirmed → delivering → completed` (допускается и сразу `completed`).
+   `delivering` запрещён заказам с `pickup` — проверяется на бэкенде, 409
+   `invalid_status_transition`. `cancelled` — из любого статуса, кроме
+   `completed`/`cancelled`. Установка того же статуса — no-op 200 без уведомления.
 
 ## 7. REST API
 
@@ -189,8 +196,8 @@ price_per_kg, line_total)`
   "delivery_time": "12:00-15:00", "comment": "" }
 
 // Order  (AdminOrder = Order + "user": User)
-{ "id": 1, "order_number": "ORD-20260907-00001", "status": "new",
-  "status_label": "Новый", "delivery_type": "delivery", "customer_name": "Иван",
+{ "id": 1, "order_number": "ORD-20260907-00001", "status": "confirmed",
+  "status_label": "Подтверждён", "delivery_type": "delivery", "customer_name": "Иван",
   "phone": "+79991234567", "address": "ул. Ленина, 1", "delivery_date": "2026-09-08",
   "delivery_time": "12:00-15:00", "comment": "", "subtotal": "1780.00",
   "delivery_price": "300.00", "total": "2080.00", "payment_method": "cash_on_delivery",

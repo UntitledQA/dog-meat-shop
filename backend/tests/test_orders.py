@@ -18,8 +18,9 @@ async def test_create_order_returns_201_and_snapshot(client, user_headers, make_
 
     assert response.status_code == 201
     body = response.json()
-    assert body["status"] == "new"
-    assert body["status_label"] == "Новый"
+    # Отдельного «нового» статуса нет: оформленный заказ сразу подтверждён.
+    assert body["status"] == "confirmed"
+    assert body["status_label"] == "Подтверждён"
     assert body["payment_method"] == "cash_on_delivery"
     assert body["order_number"].startswith("ORD-")
     assert len(body["items"]) == 1

@@ -197,21 +197,23 @@ def new_order_for_admin(order: Order) -> str:
 
 #: Человеческие формулировки под каждый статус (в дополнение к STATUS_LABELS).
 STATUS_MESSAGES: dict[OrderStatus, str] = {
-    OrderStatus.NEW: "Заказ снова в работе — мы проверим его и свяжемся с вами.",
-    OrderStatus.CONFIRMED: "Мы подтвердили заказ и уже готовим его к сборке. 🥩",
-    OrderStatus.PREPARING: "Собираем и взвешиваем ваш заказ — скоро будет готов.",
+    OrderStatus.CONFIRMED: "Мы подтвердили заказ и собираем его. 🥩",
     OrderStatus.DELIVERING: "Заказ передан курьеру и едет к вам. Пожалуйста, будьте на связи. 🚚",
-    OrderStatus.COMPLETED: "Заказ выполнен. Спасибо, что заботитесь о своём питомце! 🐕",
+    OrderStatus.COMPLETED: "Заказ готов. Спасибо, что заботитесь о своём питомце! 🐕",
     OrderStatus.CANCELLED: (
         "К сожалению, заказ отменён. Если это ошибка — напишите нам, "
         "поможем оформить заново."
     ),
 }
 
+#: Для самовывоза «Готово» значит «можно забирать», для доставки — «доставлено».
+_COMPLETED_MESSAGES: dict[DeliveryType, str] = {
+    DeliveryType.PICKUP: "Заказ собран и ждёт вас. 🥩",
+    DeliveryType.DELIVERY: "Заказ доставлен. Спасибо, что заботитесь о своём питомце! 🐕",
+}
+
 _STATUS_ICONS: dict[OrderStatus, str] = {
-    OrderStatus.NEW: "🆕",
     OrderStatus.CONFIRMED: "✅",
-    OrderStatus.PREPARING: "👨‍🍳",
     OrderStatus.DELIVERING: "🚚",
     OrderStatus.COMPLETED: "🎉",
     OrderStatus.CANCELLED: "❌",
@@ -221,10 +223,17 @@ _STATUS_ICONS: dict[OrderStatus, str] = {
 def order_status_changed(order: Order, new_status: OrderStatus) -> str:
     """Понятное сообщение покупателю о смене статуса."""
     icon = _STATUS_ICONS.get(new_status, "ℹ️")
+    if new_status == OrderStatus.COMPLETED:
+        body = _COMPLETED_MESSAGES.get(
+            order.delivery_type, STATUS_MESSAGES[OrderStatus.COMPLETED]
+        )
+    else:
+        body = STATUS_MESSAGES.get(new_status, "Статус заказа изменился.")
+
     lines = [
         f"{icon} <b>Заказ {esc(order.order_number)}: {_status_label(new_status)}</b>",
         "",
-        STATUS_MESSAGES.get(new_status, "Статус заказа изменился."),
+        body,
     ]
 
     if new_status == OrderStatus.CANCELLED:
@@ -233,7 +242,8 @@ def order_status_changed(order: Order, new_status: OrderStatus) -> str:
         lines += ["", f"Сумма заказа: <b>{format_money(order.total)}</b>", f"💵 {PAYMENT_NOTE}"]
         if new_status == OrderStatus.DELIVERING and order.delivery_type == DeliveryType.DELIVERY:
             lines.append(f"Адрес доставки: {esc(order.address) or 'не указан'}")
-        if new_status == OrderStatus.PREPARING and order.delivery_type == DeliveryType.PICKUP:
+        # Для самовывоза адрес нужен именно в момент готовности — за ним придут.
+        if new_status == OrderStatus.COMPLETED and order.delivery_type == DeliveryType.PICKUP:
             pickup = settings.pickup_address.strip()
             if pickup:
                 lines.append(f"Забрать можно по адресу: {esc(pickup)}")

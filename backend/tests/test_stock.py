@@ -267,7 +267,8 @@ async def test_cancel_after_progress_still_restores_once(
         )
     ).json()
 
-    for status_value in ("confirmed", "preparing"):
+    # Заказ создаётся подтверждённым, поэтому продвигаем его дальше — в доставку.
+    for status_value in ("delivering",):
         await client.patch(
             f"{PREFIX}/admin/orders/{order['id']}/status",
             json={"status": status_value},
@@ -300,23 +301,25 @@ async def test_status_update_is_idempotent(
         )
     ).json()
 
+    # Первый переход — настоящий: заказ создан подтверждённым, ставим «доставляется».
     first = await client.patch(
         f"{PREFIX}/admin/orders/{order['id']}/status",
-        json={"status": "confirmed"},
+        json={"status": "delivering"},
         headers=admin_headers,
     )
     assert first.status_code == 200
+    assert (order["id"], "delivering") in notifications.status_changes
     notifications.status_changes.clear()
 
     second = await client.patch(
         f"{PREFIX}/admin/orders/{order['id']}/status",
-        json={"status": "confirmed"},
+        json={"status": "delivering"},
         headers=admin_headers,
     )
 
     assert second.status_code == 200
-    assert second.json()["status"] == "confirmed"
-    assert await _status(session_factory, order["id"]) == OrderStatus.CONFIRMED
+    assert second.json()["status"] == "delivering"
+    assert await _status(session_factory, order["id"]) == OrderStatus.DELIVERING
     # Повторная установка не рассылает уведомление ещё раз.
     assert notifications.status_changes == []
 
@@ -333,17 +336,17 @@ async def test_status_change_notifies_customer(
 
     await client.patch(
         f"{PREFIX}/admin/orders/{order['id']}/status",
-        json={"status": "confirmed"},
+        json={"status": "delivering"},
         headers=admin_headers,
     )
 
-    assert (order["id"], "confirmed") in notifications.status_changes
+    assert (order["id"], "delivering") in notifications.status_changes
 
 
 async def test_invalid_transition_is_rejected(
     client, user_headers, admin_headers, make_product
 ) -> None:
-    """Из «Новый» нельзя сразу прыгнуть в «Выполнен»."""
+    """Из терминального «Готово» вернуться назад нельзя."""
     product = await make_product(stock_kg="10.0")
     order = (
         await client.post(
@@ -351,14 +354,74 @@ async def test_invalid_transition_is_rejected(
         )
     ).json()
 
+    # Подтверждён -> Готово разрешено и для доставки, и для самовывоза.
+    assert (
+        await client.patch(
+            f"{PREFIX}/admin/orders/{order['id']}/status",
+            json={"status": "completed"},
+            headers=admin_headers,
+        )
+    ).status_code == 200
+
+    response = await client.patch(
+        f"{PREFIX}/admin/orders/{order['id']}/status",
+        json={"status": "confirmed"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "invalid_status_transition"
+
+
+async def test_delivering_is_rejected_for_pickup(
+    client, user_headers, admin_headers, make_product
+) -> None:
+    """«Доставляется» бессмысленно для самовывоза — бэкенд не пускает."""
+    product = await make_product(stock_kg="10.0")
+    order = (
+        await client.post(
+            f"{PREFIX}/orders",
+            json=order_payload(product.id, "1.0", delivery_type="pickup"),
+            headers=user_headers,
+        )
+    ).json()
+
+    response = await client.patch(
+        f"{PREFIX}/admin/orders/{order['id']}/status",
+        json={"status": "delivering"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "invalid_status_transition"
+    assert "самовывоз" in response.json()["error"]["message"].lower()
+
+
+async def test_pickup_order_goes_straight_to_completed(
+    client, user_headers, admin_headers, make_product, session_factory
+) -> None:
+    """Самовывоз: подтверждён -> готово, без промежуточных статусов."""
+    product = await make_product(stock_kg="10.0")
+    order = (
+        await client.post(
+            f"{PREFIX}/orders",
+            json=order_payload(product.id, "1.5", delivery_type="pickup"),
+            headers=user_headers,
+        )
+    ).json()
+    assert order["status"] == "confirmed"
+
     response = await client.patch(
         f"{PREFIX}/admin/orders/{order['id']}/status",
         json={"status": "completed"},
         headers=admin_headers,
     )
 
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "invalid_status_transition"
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert await _status(session_factory, order["id"]) == OrderStatus.COMPLETED
+    # Готовый заказ остаток не возвращает.
+    assert await _stock(session_factory, product.id) == Decimal("8.500")
 
 
 async def test_completed_order_cannot_be_cancelled(
@@ -371,7 +434,7 @@ async def test_completed_order_cannot_be_cancelled(
         )
     ).json()
 
-    for status_value in ("confirmed", "preparing", "delivering", "completed"):
+    for status_value in ("delivering", "completed"):
         assert (
             await client.patch(
                 f"{PREFIX}/admin/orders/{order['id']}/status",
