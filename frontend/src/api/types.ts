@@ -39,6 +39,25 @@ export interface AppSettings {
   payment_note: string;
 }
 
+/** Одна подсказка адреса от GET /api/v1/addresses/suggest */
+export interface AddressSuggestion {
+  value: string;
+  city?: string | null;
+  street?: string | null;
+  house?: string | null;
+  postal_code?: string | null;
+  /** Координаты приходят строками (Decimal сериализуется строкой). */
+  lat?: string | null;
+  lon?: string | null;
+}
+
+/** Ответ GET /api/v1/addresses/suggest */
+export interface AddressSuggestions {
+  enabled: boolean;
+  provider: string;
+  items: AddressSuggestion[];
+}
+
 /** Product */
 export interface Product {
   id: number;
@@ -77,8 +96,13 @@ export interface Order {
   customer_name: string;
   phone: string;
   address: string | null;
+  address_city: string | null;
+  address_street: string | null;
+  address_house: string | null;
+  address_postal_code: string | null;
+  address_lat: string | null;
+  address_lon: string | null;
   delivery_date: string | null;
-  delivery_time: string | null;
   comment: string | null;
   subtotal: DecimalString;
   delivery_price: DecimalString;
@@ -106,8 +130,13 @@ export interface OrderCreate {
   customer_name: string;
   phone: string;
   address?: string | null;
+  address_city?: string | null;
+  address_street?: string | null;
+  address_house?: string | null;
+  address_postal_code?: string | null;
+  address_lat?: string | null;
+  address_lon?: string | null;
   delivery_date?: string | null;
-  delivery_time?: string | null;
   comment?: string | null;
 }
 

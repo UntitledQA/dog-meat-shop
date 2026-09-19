@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.api.v1.addresses import router as addresses_router
 from app.api.v1.admin_orders import router as admin_orders_router
 from app.api.v1.admin_products import router as admin_products_router
 from app.api.v1.auth import router as auth_router
@@ -19,5 +20,6 @@ api_router.include_router(auth_router)
 api_router.include_router(meta_router)
 api_router.include_router(catalog_router)
 api_router.include_router(orders_router)
+api_router.include_router(addresses_router)
 api_router.include_router(admin_products_router)
 api_router.include_router(admin_orders_router)

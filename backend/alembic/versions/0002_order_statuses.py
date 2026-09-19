@@ -50,18 +50,17 @@ def upgrade() -> None:
         )
     )
 
-    # 2. Значение по умолчанию: заказ рождается подтверждённым.
-    op.alter_column(
-        "orders",
-        "status",
-        existing_type=sa.String(length=20),
-        existing_nullable=False,
-        server_default="confirmed",
-    )
-
-    # 3. Ограничения. batch_alter_table нужен ради SQLite: там CHECK нельзя
-    #    добавить на месте, таблица пересоздаётся. В PostgreSQL это обычный ALTER.
+    # 2. Значение по умолчанию и CHECK-ограничения — одним batch_alter_table.
+    #    Это обязательно ради SQLite: там нет ни ALTER COLUMN, ни добавления CHECK
+    #    на месте, и голый op.alter_column падает с «near "ALTER": syntax error».
+    #    batch_alter_table пересоздаёт таблицу; в PostgreSQL это обычные ALTER.
     with op.batch_alter_table("orders", schema=None) as batch_op:
+        batch_op.alter_column(
+            "status",
+            existing_type=sa.String(length=20),
+            existing_nullable=False,
+            server_default="confirmed",
+        )
         batch_op.create_check_constraint(
             "order_status", f"status IN ({_in_list(NEW_STATUSES)})"
         )
@@ -74,14 +73,12 @@ def downgrade() -> None:
     with op.batch_alter_table("orders", schema=None) as batch_op:
         batch_op.drop_constraint("delivery_type", type_="check")
         batch_op.drop_constraint("order_status", type_="check")
-
-    op.alter_column(
-        "orders",
-        "status",
-        existing_type=sa.String(length=20),
-        existing_nullable=False,
-        server_default="new",
-    )
+        batch_op.alter_column(
+            "status",
+            existing_type=sa.String(length=20),
+            existing_nullable=False,
+            server_default="new",
+        )
     # Данные назад не разворачиваем: исходные new и preparing неразличимы после
     # схлопывания, и угадывать, каким был каждый заказ, значило бы портить их.
     _ = OLD_STATUSES

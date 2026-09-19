@@ -204,8 +204,15 @@ async def create_order(session: AsyncSession, user: User, payload: OrderCreate) 
             customer_name=payload.customer_name,
             phone=payload.phone,
             address=(payload.address or None),
+            # Пустая строка от формы — это «не заполнено», а не значение.
+            # Координаты через `or None` гонять нельзя: Decimal("0") — валидный ноль.
+            address_city=(payload.address_city or None),
+            address_street=(payload.address_street or None),
+            address_house=(payload.address_house or None),
+            address_postal_code=(payload.address_postal_code or None),
+            address_lat=payload.address_lat,
+            address_lon=payload.address_lon,
             delivery_date=payload.delivery_date,
-            delivery_time=payload.delivery_time,
             comment=payload.comment,
             subtotal=subtotal,
             delivery_price=delivery_price,

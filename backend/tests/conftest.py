@@ -46,6 +46,7 @@ os.environ["LOG_LEVEL"] = "WARNING"
 os.environ["RATE_LIMIT_AUTH"] = "off"
 os.environ["RATE_LIMIT_ORDERS"] = "off"
 os.environ["RATE_LIMIT_UPLOADS"] = "off"
+os.environ["RATE_LIMIT_ADDRESSES"] = "off"
 
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
@@ -272,7 +273,6 @@ def order_payload(
         "customer_name": "Иван Петров",
         "phone": "+79991234567",
         "delivery_date": "2030-01-15",
-        "delivery_time": "12:00-15:00",
         "comment": "Позвонить заранее",
     }
     if delivery_type == "delivery":

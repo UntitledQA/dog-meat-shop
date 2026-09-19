@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated, Any, Generic, TypeVar
 
 from pydantic import (
@@ -32,6 +32,8 @@ __all__ = [
     "DEFAULT_PAGE_LIMIT",
     "MAX_PAGE_LIMIT",
     "AppSettingsOut",
+    "Latitude",
+    "Longitude",
     "MoneyDecimal",
     "NonNegativeMoney",
     "NonNegativeWeight",
@@ -162,6 +164,65 @@ OrderWeight = Annotated[
     BeforeValidator(_coerce_decimal),
     AfterValidator(_order_weight),
     _WeightSerializer,
+]
+
+# --- Координаты ------------------------------------------------------------
+# То же правило, что для денег и веса: считаем в Decimal, в JSON отдаём строкой.
+# Для координат это важно вдвойне — float превращает 55.755814 в
+# 55.75581400000001 уже при сериализации.
+
+#: Шесть знаков после точки: около 11 см на местности и ровно столько же,
+#: сколько хранит колонка Numeric(9, 6). Точнее для адреса бессмысленно.
+COORDINATE_EXP = Decimal("0.000001")
+MAX_LATITUDE = Decimal("90")
+MAX_LONGITUDE = Decimal("180")
+
+
+def _round_coordinate(value: Decimal, bound: Decimal, name: str) -> Decimal:
+    """Округляет координату до шести знаков и проверяет диапазон.
+
+    `InvalidOperation` (например, на «1e1000») превращается в `ValueError`,
+    иначе ошибка ввода дошла бы до обработчика как 500 вместо 422.
+    """
+    if not value.is_finite():
+        raise ValueError(f"{name} должна быть конечным числом")
+    if abs(value) > bound:
+        raise ValueError(f"{name} должна быть в диапазоне от -{bound} до {bound}")
+    try:
+        return value.quantize(COORDINATE_EXP, rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        raise ValueError("Слишком большое числовое значение") from None
+
+
+def _latitude(value: Decimal) -> Decimal:
+    return _round_coordinate(value, MAX_LATITUDE, "Широта")
+
+
+def _longitude(value: Decimal) -> Decimal:
+    return _round_coordinate(value, MAX_LONGITUDE, "Долгота")
+
+
+def _coordinate_to_str(value: Decimal) -> str:
+    return f"{value:.6f}"
+
+
+_CoordinateSerializer = PlainSerializer(
+    _coordinate_to_str, return_type=str, when_used="unless-none"
+)
+
+#: Широта: шесть знаков, диапазон -90..90, в JSON — строка ("55.755814").
+Latitude = Annotated[
+    Decimal,
+    BeforeValidator(_coerce_decimal),
+    AfterValidator(_latitude),
+    _CoordinateSerializer,
+]
+#: Долгота: шесть знаков, диапазон -180..180, в JSON — строка ("37.617635").
+Longitude = Annotated[
+    Decimal,
+    BeforeValidator(_coerce_decimal),
+    AfterValidator(_longitude),
+    _CoordinateSerializer,
 ]
 
 #: Непустая строка: пробелы по краям срезаются до проверки длины.

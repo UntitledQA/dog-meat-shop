@@ -3,14 +3,23 @@
 import { formatPrice, formatPricePerKg, formatWeight } from '../lib/money';
 import { formatDate, formatDateTime } from '../lib/date';
 import { deliveryTypeLabel } from '../lib/orderStatus';
-import { formatPhone, formatTimeSlot } from '../lib/validation';
+import { formatPhone } from '../lib/validation';
 import type { Order } from '../api/types';
 
-export function InfoRow({ label, value }: { label: string; value: string }) {
+/** Строка «подпись — значение». `muted` приглушает значение (например, выходной день). */
+export function InfoRow({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
   return (
     <div className="info-row">
       <span className="info-row__label">{label}</span>
-      <span className="info-row__value">{value}</span>
+      <span className={'info-row__value' + (muted ? ' muted' : '')}>{value}</span>
     </div>
   );
 }
@@ -18,9 +27,6 @@ export function InfoRow({ label, value }: { label: string; value: string }) {
 /** Данные доставки/самовывоза и контакты покупателя. */
 export function OrderInfo({ order }: { order: Order }) {
   const isDelivery = order.delivery_type === 'delivery';
-  const when =
-    formatDate(order.delivery_date) +
-    (order.delivery_time ? ', ' + formatTimeSlot(order.delivery_time) : '');
 
   return (
     <div className="panel stack stack--tight">
@@ -28,7 +34,7 @@ export function OrderInfo({ order }: { order: Order }) {
       <InfoRow label="Оформлен" value={formatDateTime(order.created_at)} />
       <InfoRow label="Способ" value={deliveryTypeLabel(order.delivery_type)} />
       {isDelivery ? <InfoRow label="Адрес" value={order.address ?? '—'} /> : null}
-      <InfoRow label="Когда" value={when} />
+      <InfoRow label="Когда" value={formatDate(order.delivery_date)} />
       <InfoRow label="Получатель" value={order.customer_name} />
       <InfoRow label="Телефон" value={formatPhone(order.phone)} />
       {order.comment ? <InfoRow label="Комментарий" value={order.comment} /> : null}

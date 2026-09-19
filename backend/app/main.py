@@ -37,6 +37,7 @@ OPENAPI_TAGS = [
     {"name": "Профиль", "description": "Текущий пользователь и настройки магазина"},
     {"name": "Каталог", "description": "Витрина товаров"},
     {"name": "Заказы", "description": "Оформление и просмотр заказов покупателя"},
+    {"name": "Адреса", "description": "Подсказки адреса доставки"},
     {"name": "Админ: товары", "description": "Управление каталогом и изображениями"},
     {"name": "Админ: заказы", "description": "Обработка заказов и смена статусов"},
     {"name": "Служебные", "description": "Проверка работоспособности сервиса"},
@@ -96,6 +97,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         retry_task.cancel()
         with suppress(asyncio.CancelledError):
             await retry_task
+
+    # Подсказки адресов держат собственный httpx-клиент с пулом соединений.
+    from app.services.address_service import shutdown as shutdown_address_client
+
+    await shutdown_address_client()
 
     # API-процесс тоже создаёт инстанс бота — для уведомлений о заказах.
     # Его HTTP-сессию нужно закрыть, иначе aiohttp ругается на незакрытый connector.

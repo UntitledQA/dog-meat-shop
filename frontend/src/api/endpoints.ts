@@ -5,6 +5,7 @@
 
 import { API_PREFIX, request } from './client';
 import type {
+  AddressSuggestions,
   AdminOrder,
   AdminOrderListParams,
   AdminProductListParams,
@@ -38,6 +39,22 @@ export function getMe(): Promise<User> {
 /** GET /api/v1/settings */
 export function getSettings(): Promise<AppSettings> {
   return request<AppSettings>(p('/settings'));
+}
+
+/**
+ * GET /api/v1/addresses/suggest
+ *
+ * `signal` обязателен для отмены устаревших запросов: пользователь печатает
+ * быстрее, чем отвечает сервис подсказок.
+ */
+export function suggestAddresses(
+  query: string,
+  options: { limit?: number; signal?: AbortSignal } = {},
+): Promise<AddressSuggestions> {
+  return request<AddressSuggestions>(p('/addresses/suggest'), {
+    query: { query, limit: options.limit },
+    signal: options.signal,
+  });
 }
 
 /** GET /api/v1/catalog */

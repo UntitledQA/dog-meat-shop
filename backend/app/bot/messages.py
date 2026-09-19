@@ -48,7 +48,7 @@ HELP_TEXT = (
     "❓ <b>Как это работает</b>\n\n"
     "1️⃣ Открываете магазин и выбираете мясо\n"
     "2️⃣ Указываете вес — от 100 г, шагом по 100 г\n"
-    "3️⃣ В корзине выбираете доставку или самовывоз, дату и удобное время\n"
+    "3️⃣ В корзине выбираете доставку или самовывоз и удобную дату\n"
     "4️⃣ Оставляете имя и телефон — и оформляете заказ\n"
     "5️⃣ Оплачиваете при получении\n\n"
     "<b>Команды</b>\n"
@@ -132,10 +132,7 @@ def _receiving_block(order: Order, *, for_admin: bool) -> str:
         if for_admin and order.address:
             lines.append(f"Адрес в заявке: {esc(order.address)}")
 
-    when = format_date(order.delivery_date)
-    if order.delivery_time:
-        when = f"{when}, {esc(order.delivery_time)}"
-    lines.append(f"Когда: {when}")
+    lines.append(f"Когда: {format_date(order.delivery_date)}")
     return "\n".join(lines)
 
 

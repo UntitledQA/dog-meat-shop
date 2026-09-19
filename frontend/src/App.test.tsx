@@ -5,6 +5,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
@@ -54,8 +55,13 @@ const order: Order = {
   customer_name: 'Иван',
   phone: '+79991234567',
   address: 'ул. Ленина, 1',
+  address_city: null,
+  address_street: null,
+  address_house: null,
+  address_postal_code: null,
+  address_lat: null,
+  address_lon: null,
   delivery_date: '2026-09-09',
-  delivery_time: '13:00-16:00',
   comment: null,
   subtotal: '1780.00',
   delivery_price: '300.00',
@@ -158,6 +164,76 @@ describe('маршруты покупателя', () => {
     renderRoute('/checkout');
     expect(await screen.findByRole('button', { name: /Подтвердить заказ/ })).toBeInTheDocument();
     expect(screen.getByLabelText('Адрес доставки')).toBeInTheDocument();
+    // Выбора интервала времени в форме больше нет.
+    expect(screen.queryByText('Интервал времени')).not.toBeInTheDocument();
+    // Постоянный блок с условиями доставки и графиком работы.
+    expect(screen.getByText('Условия доставки')).toBeInTheDocument();
+    expect(screen.getByText('График работы')).toBeInTheDocument();
+    expect(screen.getByText('ВТ')).toBeInTheDocument();
+  });
+
+  it('/checkout — выбранная подсказка адреса уходит в заказ', async () => {
+    const user = userEvent.setup();
+    const suggestion = {
+      value: 'Омск, ул. 2-я Солнечная, 31А',
+      city: 'Омск',
+      street: '2-я Солнечная',
+      house: '31А',
+      postal_code: '644073',
+      lat: '54.989342',
+      lon: '73.368212',
+    };
+
+    // Подсказки и создание заказа поверх общего мока.
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/v1/addresses/suggest')) {
+        return json({ enabled: true, provider: 'photon', items: [suggestion] });
+      }
+      if (url.includes('/api/v1/orders') && init?.method === 'POST') {
+        return json({ ...order, address: suggestion.value }, 201);
+      }
+      if (url.includes('/api/v1/me')) return json(admin);
+      if (url.includes('/api/v1/settings')) return json(settings);
+      return json({ error: { code: 'not_found', message: 'Не найдено', details: {} } }, 404);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    useCartStore.getState().add(product, '2.000');
+    renderRoute('/checkout');
+
+    await screen.findByRole('button', { name: /Подтвердить заказ/ });
+    // Имя и телефон подставляются из профиля Telegram — очищаем перед вводом.
+    const name = screen.getByLabelText('Имя');
+    await user.clear(name);
+    await user.type(name, 'Иван');
+    const phone = screen.getByLabelText('Телефон');
+    await user.clear(phone);
+    await user.type(phone, '+79991234567');
+    await user.type(screen.getByLabelText('Адрес доставки'), 'Солнечная');
+
+    // Подсказка приходит после задержки в 300 мс.
+    const option = await screen.findByRole('option', { name: suggestion.value }, { timeout: 3000 });
+    await user.click(option);
+
+    await user.click(screen.getByRole('button', { name: /Подтвердить заказ/ }));
+
+    const post = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes('/api/v1/orders') && (init as RequestInit | undefined)?.method === 'POST',
+    );
+    expect(post).toBeDefined();
+    const body = JSON.parse(String((post?.[1] as RequestInit).body));
+    expect(body.address).toBe(suggestion.value);
+    expect(body.address_city).toBe('Омск');
+    expect(body.address_street).toBe('2-я Солнечная');
+    expect(body.address_house).toBe('31А');
+    expect(body.address_postal_code).toBe('644073');
+    // Координаты остаются строками — Decimal в JSON сериализуется строкой.
+    expect(body.address_lat).toBe('54.989342');
+    expect(body.address_lon).toBe('73.368212');
+    // Интервала времени в теле запроса быть не должно.
+    expect(body).not.toHaveProperty('delivery_time');
   });
 
   it('/orders — список заказов', async () => {

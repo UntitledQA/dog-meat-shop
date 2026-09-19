@@ -11,7 +11,6 @@ export interface CheckoutFormValues {
   deliveryType: DeliveryType;
   address: string;
   deliveryDate: string;
-  deliveryTime: string;
   comment: string;
 }
 
@@ -20,22 +19,8 @@ export type CheckoutErrors = Record<string, string>;
 export const NAME_MIN_LENGTH = 2;
 export const NAME_MAX_LENGTH = 100;
 export const COMMENT_MAX_LENGTH = 500;
-export const ADDRESS_MAX_LENGTH = 300;
-
-/** Доступные интервалы доставки (значения уходят в поле delivery_time). */
-export const DELIVERY_TIME_SLOTS = [
-  '10:00-13:00',
-  '13:00-16:00',
-  '16:00-19:00',
-  '19:00-22:00',
-] as const;
-
-export type DeliveryTimeSlot = (typeof DELIVERY_TIME_SLOTS)[number];
-
-/** Человекочитаемый вид интервала: «10:00 – 13:00». */
-export function formatTimeSlot(slot: string): string {
-  return slot.replace('-', ' – ');
-}
+/** Совпадает с ограничением бэкенда: OrderCreate.address — max_length=512. */
+export const ADDRESS_MAX_LENGTH = 512;
 
 /**
  * Нормализация российского телефона к формату +7XXXXXXXXXX.
@@ -136,13 +121,6 @@ export function validateCheckout(
     errors.deliveryDate = 'Некорректная дата';
   } else if (isPastDate(date, now)) {
     errors.deliveryDate = 'Дата не может быть в прошлом';
-  }
-
-  const time = (values.deliveryTime ?? '').trim();
-  if (time === '') {
-    errors.deliveryTime = 'Выберите интервал времени';
-  } else if (!DELIVERY_TIME_SLOTS.includes(time as DeliveryTimeSlot)) {
-    errors.deliveryTime = 'Выберите интервал из списка';
   }
 
   const comment = values.comment ?? '';

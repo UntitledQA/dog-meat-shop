@@ -2,10 +2,17 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '../components/Layout';
 import { Button, EmptyState, LinkButton, Photo } from '../components/ui';
+import { InfoRow } from '../components/OrderDetails';
+import { AddressAutocomplete } from '../components/AddressAutocomplete';
 import { useToast } from '../components/ToastContext';
 import { ApiError, errorMessage } from '../api/client';
 import { useCreateOrder, useMe, useSettings } from '../api/queries';
-import type { InsufficientStockItem, Order, OrderCreate } from '../api/types';
+import type {
+  AddressSuggestion,
+  InsufficientStockItem,
+  Order,
+  OrderCreate,
+} from '../api/types';
 import { useCartStore } from '../store/cart';
 import {
   calcCartTotal,
@@ -18,20 +25,55 @@ import {
 import { formatDate, isoDatePlusDays } from '../lib/date';
 import {
   COMMENT_MAX_LENGTH,
-  DELIVERY_TIME_SLOTS,
-  formatTimeSlot,
   hasErrors,
   normalizePhone,
   todayIsoDate,
   validateCheckout,
 } from '../lib/validation';
 import type { CheckoutErrors, CheckoutFormValues } from '../lib/validation';
+import {
+  DELIVERY_NOTE,
+  DELIVERY_TERMS,
+  PICKUP_ADDRESS_FALLBACK,
+  PICKUP_NOTE,
+  WORK_SCHEDULE,
+} from '../lib/deliveryInfo';
 import { getTelegramUserName, haptic } from '../telegram/webapp';
 
 /** Подпись поля с ошибкой валидации. */
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return <span className="field__error">{message}</span>;
+}
+
+/**
+ * Разобранный адрес выбранной подсказки.
+ *
+ * Хранится отдельно от `CheckoutFormValues`, потому что валидация формы про эти
+ * поля ничего не знает: они необязательны и приходят целиком из сервиса подсказок.
+ * `value` — строка, к которой относятся остальные части: по ней видно, что
+ * пользователь правил адрес руками и разбор больше не соответствует введённому.
+ */
+interface SelectedAddress {
+  value: string;
+  city: string | null;
+  street: string | null;
+  house: string | null;
+  postalCode: string | null;
+  lat: string | null;
+  lon: string | null;
+}
+
+function toSelectedAddress(suggestion: AddressSuggestion): SelectedAddress {
+  return {
+    value: suggestion.value,
+    city: suggestion.city ?? null,
+    street: suggestion.street ?? null,
+    house: suggestion.house ?? null,
+    postalCode: suggestion.postal_code ?? null,
+    lat: suggestion.lat ?? null,
+    lon: suggestion.lon ?? null,
+  };
 }
 
 function initialValues(): CheckoutFormValues {
@@ -41,7 +83,6 @@ function initialValues(): CheckoutFormValues {
     deliveryType: 'delivery',
     address: '',
     deliveryDate: isoDatePlusDays(1),
-    deliveryTime: DELIVERY_TIME_SLOTS[0],
     comment: '',
   };
 }
@@ -74,10 +115,7 @@ function OrderCreated({ order, pickupAddress }: { order: Order; pickupAddress: s
           </div>
           <div className="info-row">
             <span className="info-row__label">Когда</span>
-            <span className="info-row__value">
-              {formatDate(order.delivery_date)}
-              {order.delivery_time ? ', ' + formatTimeSlot(order.delivery_time) : ''}
-            </span>
+            <span className="info-row__value">{formatDate(order.delivery_date)}</span>
           </div>
           <div className="summary-row summary-row--total">
             <span>Итого</span>
@@ -109,6 +147,7 @@ export function CheckoutPage() {
   const [errors, setErrors] = useState<CheckoutErrors>({});
   const [stockIssues, setStockIssues] = useState<InsufficientStockItem[]>([]);
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
+  const [selectedAddress, setSelectedAddress] = useState<SelectedAddress | null>(null);
 
   // Телефон и имя из профиля подставляем один раз — если пользователь ещё не вводил свои.
   useEffect(() => {
@@ -130,6 +169,25 @@ export function CheckoutPage() {
     items.map((item) => ({ weightKg: item.weightKg, pricePerKg: item.pricePerKg })),
     deliveryPrice,
   );
+
+  /** Свободный ввод адреса: разбор подсказки после правки может стать неверным. */
+  const handleAddressChange = (next: string) => {
+    setField('address', next);
+    setSelectedAddress((current) => {
+      if (!current) return null;
+      // Дописать «кв. 5» к выбранному варианту — нормально, координаты остаются
+      // верными. А вот если строку изменили в начале, разобранные части и
+      // координаты относятся уже к другому месту: сбрасываем, чтобы не отправить
+      // курьера по адресу, которого пользователь не выбирал.
+      return next.startsWith(current.value) ? current : null;
+    });
+  };
+
+  /** Выбран вариант из списка подсказок. */
+  const handleAddressSelect = (suggestion: AddressSuggestion) => {
+    setField('address', suggestion.value);
+    setSelectedAddress(toSelectedAddress(suggestion));
+  };
 
   const setField = <K extends keyof CheckoutFormValues>(key: K, value: CheckoutFormValues[K]) => {
     setValues((current) => ({ ...current, [key]: value }));
@@ -162,8 +220,19 @@ export function CheckoutPage() {
       customer_name: values.customerName.trim(),
       phone: normalizePhone(values.phone),
       address: isDelivery ? values.address.trim() : null,
+      // Разобранный адрес отправляем только вместе с доставкой и только если он
+      // относится к тому, что сейчас в поле (см. handleAddressChange).
+      ...(isDelivery && selectedAddress
+        ? {
+            address_city: selectedAddress.city,
+            address_street: selectedAddress.street,
+            address_house: selectedAddress.house,
+            address_postal_code: selectedAddress.postalCode,
+            address_lat: selectedAddress.lat,
+            address_lon: selectedAddress.lon,
+          }
+        : {}),
       delivery_date: values.deliveryDate,
-      delivery_time: values.deliveryTime,
       comment: comment === '' ? null : comment,
     };
 
@@ -265,26 +334,16 @@ export function CheckoutPage() {
           </div>
 
           {isDelivery ? (
-            <div className="field">
-              <label className="field__label" htmlFor="checkout-address">
-                Адрес доставки
-              </label>
-              <input
-                id="checkout-address"
-                className={'input' + (errors.address ? ' has-error' : '')}
-                type="text"
-                autoComplete="street-address"
-                placeholder="Улица, дом, квартира"
-                value={values.address}
-                onChange={(event) => setField('address', event.target.value)}
-              />
-              <FieldError message={errors.address} />
-            </div>
-          ) : (
-            <p className="field__hint">
-              Заберите заказ по адресу: {settings?.pickup_address ?? 'уточним при подтверждении'}
-            </p>
-          )}
+            <AddressAutocomplete
+              id="checkout-address"
+              label="Адрес доставки"
+              placeholder="Улица, дом, квартира"
+              value={values.address}
+              error={errors.address}
+              onChange={handleAddressChange}
+              onSelect={handleAddressSelect}
+            />
+          ) : null}
 
           <div className="field">
             <label className="field__label" htmlFor="checkout-date">
@@ -302,26 +361,6 @@ export function CheckoutPage() {
           </div>
 
           <div className="field">
-            <span className="field__label" id="checkout-time-label">
-              Интервал времени
-            </span>
-            <div className="chips" role="group" aria-labelledby="checkout-time-label">
-              {DELIVERY_TIME_SLOTS.map((slot) => (
-                <button
-                  key={slot}
-                  type="button"
-                  className={'chip' + (values.deliveryTime === slot ? ' is-active' : '')}
-                  aria-pressed={values.deliveryTime === slot}
-                  onClick={() => setField('deliveryTime', slot)}
-                >
-                  {formatTimeSlot(slot)}
-                </button>
-              ))}
-            </div>
-            <FieldError message={errors.deliveryTime} />
-          </div>
-
-          <div className="field">
             <label className="field__label" htmlFor="checkout-comment">
               Комментарий
             </label>
@@ -335,6 +374,26 @@ export function CheckoutPage() {
             />
             <FieldError message={errors.comment} />
           </div>
+        </div>
+
+        {/* --------------------- Условия доставки и график работы ------------------ */}
+        <div className="panel stack stack--tight">
+          <h2>{isDelivery ? 'Условия доставки' : 'Условия самовывоза'}</h2>
+
+          {isDelivery ? (
+            DELIVERY_TERMS.map((term) => (
+              <InfoRow key={term.label} label={term.label} value={term.value} />
+            ))
+          ) : (
+            <InfoRow label="Адрес" value={settings?.pickup_address ?? PICKUP_ADDRESS_FALLBACK} />
+          )}
+
+          <div className="section-title">График работы</div>
+          {WORK_SCHEDULE.map((day) => (
+            <InfoRow key={day.day} label={day.day} value={day.hours} muted={day.isDayOff} />
+          ))}
+
+          <p className="field__hint">{isDelivery ? DELIVERY_NOTE : PICKUP_NOTE}</p>
         </div>
 
         {/* ------------------------------ Состав заказа ---------------------------- */}

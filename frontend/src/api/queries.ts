@@ -5,6 +5,7 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import { ApiError } from './client';
 import * as api from './endpoints';
 import type {
+  AddressSuggestions,
   AdminOrder,
   AdminOrderListParams,
   AdminProductListParams,
@@ -20,9 +21,20 @@ import type {
   User,
 } from './types';
 
+/** Короче этого подсказки адреса не запрашиваем — сервис вернёт мусор. */
+export const ADDRESS_SUGGEST_MIN_LENGTH = 3;
+
+/** Длиннее бэкенд отвечает 422: `query` у /addresses/suggest ограничен 200. */
+const ADDRESS_SUGGEST_MAX_LENGTH = 200;
+
+/** Сколько вариантов просим у сервиса подсказок (бэкенд ограничивает 1..10). */
+const ADDRESS_SUGGEST_LIMIT = 7;
+
 export const queryKeys = {
   me: ['me'] as const,
   settings: ['settings'] as const,
+  addressSuggestions: (query: string, limit: number) =>
+    ['addresses', 'suggest', query, limit] as const,
   catalog: (params: PageParams) => ['catalog', params] as const,
   product: (id: number) => ['product', id] as const,
   myOrders: (params: PageParams) => ['orders', params] as const,
@@ -55,6 +67,29 @@ export function useSettings(): UseQueryResult<AppSettings, unknown> {
     queryFn: api.getSettings,
     retry: retryPolicy,
     staleTime: 10 * 60 * 1000,
+  });
+}
+
+/**
+ * Подсказки адреса. Запрос уходит только при достаточно длинном вводе,
+ * `enabled` позволяет вызывающему коду дополнительно погасить его (например,
+ * пока выпадающий список закрыт).
+ */
+export function useAddressSuggestions(
+  query: string,
+  options: { enabled?: boolean; limit?: number } = {},
+): UseQueryResult<AddressSuggestions, unknown> {
+  const text = query.trim();
+  const limit = options.limit ?? ADDRESS_SUGGEST_LIMIT;
+  return useQuery({
+    queryKey: queryKeys.addressSuggestions(text, limit),
+    queryFn: ({ signal }) => api.suggestAddresses(text, { limit, signal }),
+    enabled:
+      (options.enabled ?? true) &&
+      text.length >= ADDRESS_SUGGEST_MIN_LENGTH &&
+      text.length <= ADDRESS_SUGGEST_MAX_LENGTH,
+    retry: retryPolicy,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

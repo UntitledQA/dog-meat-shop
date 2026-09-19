@@ -187,6 +187,187 @@ async def test_pickup_does_not_require_address(client, user_headers, make_produc
     assert response.status_code == 201
 
 
+# ---------------------------------------------------------------------------
+# Структурированный адрес
+# ---------------------------------------------------------------------------
+
+
+async def test_structured_address_is_saved_and_read_back(
+    client, user_headers, make_product
+) -> None:
+    """Части адреса из сервиса подсказок сохраняются рядом с плоской строкой."""
+    product = await make_product(stock_kg="10.0")
+    payload = order_payload(
+        product.id,
+        "1.0",
+        address_city="Москва",
+        address_street="улица Ленина",
+        address_house="1к2",
+        address_postal_code="101000",
+        address_lat="55.755814",
+        address_lon="37.617635",
+    )
+
+    created = (await client.post(f"{PREFIX}/orders", json=payload, headers=user_headers)).json()
+    body = (await client.get(f"{PREFIX}/orders/{created['id']}", headers=user_headers)).json()
+
+    assert body["address_city"] == "Москва"
+    assert body["address_street"] == "улица Ленина"
+    assert body["address_house"] == "1к2"
+    assert body["address_postal_code"] == "101000"
+    # Плоский адрес остаётся тем, что покупатель видит и правит руками.
+    assert body["address"] == payload["address"]
+
+
+async def test_coordinates_are_serialized_as_strings(client, user_headers, make_product) -> None:
+    """Координаты уезжают в JSON строками — как деньги и вес, без float."""
+    product = await make_product(stock_kg="10.0")
+    payload = order_payload(product.id, "1.0", address_lat="55.755814", address_lon="37.617635")
+
+    body = (await client.post(f"{PREFIX}/orders", json=payload, headers=user_headers)).json()
+
+    assert body["address_lat"] == "55.755814"
+    assert body["address_lon"] == "37.617635"
+    assert isinstance(body["address_lat"], str)
+    assert isinstance(body["address_lon"], str)
+    assert Decimal(body["address_lat"]) == Decimal("55.755814")
+
+
+async def test_coordinates_accept_numbers_and_keep_six_places(
+    client, user_headers, make_product
+) -> None:
+    """Число на входе допустимо, но наружу всё равно уходит строка с шестью знаками."""
+    product = await make_product(stock_kg="10.0")
+    payload = order_payload(product.id, "1.0", address_lat=55.75, address_lon=-0.1)
+
+    body = (await client.post(f"{PREFIX}/orders", json=payload, headers=user_headers)).json()
+
+    assert body["address_lat"] == "55.750000"
+    assert body["address_lon"] == "-0.100000"
+
+
+async def test_order_without_structured_address_still_works(
+    client, user_headers, make_product
+) -> None:
+    """Обратная совместимость: подсказка могла не сработать — заказ всё равно создаётся."""
+    product = await make_product(stock_kg="10.0")
+
+    response = await client.post(
+        f"{PREFIX}/orders", json=order_payload(product.id, "1.0"), headers=user_headers
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["address_city"] is None
+    assert body["address_lat"] is None
+    assert body["address_lon"] is None
+
+
+async def test_partial_structured_address_is_accepted(client, user_headers, make_product) -> None:
+    """Подсказка может не знать индекс — это не повод отклонять заказ."""
+    product = await make_product(stock_kg="10.0")
+    payload = order_payload(product.id, "1.0", address_city="Москва", address_street="Тверская")
+
+    response = await client.post(f"{PREFIX}/orders", json=payload, headers=user_headers)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["address_city"] == "Москва"
+    assert body["address_postal_code"] is None
+
+
+async def test_blank_address_parts_become_null(client, user_headers, make_product) -> None:
+    """Пустая строка от формы — это «не заполнено», а не значение."""
+    product = await make_product(stock_kg="10.0")
+    payload = order_payload(product.id, "1.0", address_city="", address_postal_code="")
+
+    body = (await client.post(f"{PREFIX}/orders", json=payload, headers=user_headers)).json()
+
+    assert body["address_city"] is None
+    assert body["address_postal_code"] is None
+
+
+async def test_zero_coordinates_are_preserved(client, user_headers, make_product) -> None:
+    """Ноль — валидная координата и не должен схлопываться в null."""
+    product = await make_product(stock_kg="10.0")
+    payload = order_payload(product.id, "1.0", address_lat="0", address_lon="0")
+
+    body = (await client.post(f"{PREFIX}/orders", json=payload, headers=user_headers)).json()
+
+    assert body["address_lat"] == "0.000000"
+    assert body["address_lon"] == "0.000000"
+
+
+async def test_latitude_out_of_range_is_rejected(client, user_headers, make_product) -> None:
+    """Широта вне -90..90 — это 422, а не 500 из недр БД."""
+    product = await make_product(stock_kg="10.0")
+
+    response = await client.post(
+        f"{PREFIX}/orders",
+        json=order_payload(product.id, "1.0", address_lat="91.0"),
+        headers=user_headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+async def test_longitude_out_of_range_is_rejected(client, user_headers, make_product) -> None:
+    """Долгота вне -180..180 — тоже 422."""
+    product = await make_product(stock_kg="10.0")
+
+    response = await client.post(
+        f"{PREFIX}/orders",
+        json=order_payload(product.id, "1.0", address_lon="-180.5"),
+        headers=user_headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+async def test_non_numeric_coordinate_is_rejected(client, user_headers, make_product) -> None:
+    """Мусор в координате не должен долетать до БД."""
+    product = await make_product(stock_kg="10.0")
+
+    for value in ("север", "NaN", "1e1000"):
+        response = await client.post(
+            f"{PREFIX}/orders",
+            json=order_payload(product.id, "1.0", address_lat=value),
+            headers=user_headers,
+        )
+        assert response.status_code == 422, value
+
+
+async def test_delivery_time_is_no_longer_accepted(client, user_headers, make_product) -> None:
+    """Интервал доставки убран из проекта: `extra="forbid"` не пускает его обратно."""
+    product = await make_product(stock_kg="10.0")
+
+    response = await client.post(
+        f"{PREFIX}/orders",
+        json=order_payload(product.id, "1.0", delivery_time="12:00-15:00"),
+        headers=user_headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+async def test_order_response_has_no_delivery_time_field(
+    client, user_headers, make_product
+) -> None:
+    """Поля нет и в ответе — фронту нечего оттуда читать."""
+    product = await make_product(stock_kg="10.0")
+
+    body = (
+        await client.post(
+            f"{PREFIX}/orders", json=order_payload(product.id, "1.0"), headers=user_headers
+        )
+    ).json()
+
+    assert "delivery_time" not in body
+
+
 async def test_weight_below_minimum_is_rejected(client, user_headers, make_product) -> None:
     product = await make_product(stock_kg="10.0")
 

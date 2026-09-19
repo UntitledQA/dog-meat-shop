@@ -45,7 +45,7 @@ app/bot/          aiogram handlers, клавиатуры, polling и delivery ou
 - `User`: `id`, уникальный `telegram_id`, username/name/phone, `is_admin`, timestamps.
 - `Product`: name/description, `price_per_kg Numeric(10,2)`, `stock_kg Numeric(10,3)`,
   `photo_url`, `is_active`, timestamps, DB checks `>= 0`.
-- `Order`: номер, user FK, status/delivery type, контакты/адрес/дата/интервал/comment,
+- `Order`: номер, user FK, status/delivery type, контакты/адрес (плоский и разобранный)/дата/comment,
   subtotal/delivery/total, `stock_restored_at`, timestamps.
 - `OrderItem`: order/product FK и неизменяемый снимок имени, веса, цены и суммы.
 - `NotificationOutbox`: уникальный event key, Telegram recipient, тип/payload, attempts,

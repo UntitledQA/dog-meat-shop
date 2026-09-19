@@ -1,5 +1,13 @@
 """Pydantic-схемы API. Все Decimal сериализуются строками."""
 
+from app.schemas.address import (
+    DEFAULT_SUGGEST_LIMIT,
+    MAX_QUERY_LENGTH,
+    MAX_SUGGEST_LIMIT,
+    MIN_QUERY_LENGTH,
+    AddressSuggestion,
+    AddressSuggestionsOut,
+)
 from app.schemas.common import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
@@ -28,9 +36,15 @@ from app.schemas.user import UserOut
 
 __all__ = [
     "DEFAULT_PAGE_LIMIT",
+    "DEFAULT_SUGGEST_LIMIT",
     "MAX_ORDER_ITEMS",
     "MAX_PAGE_LIMIT",
+    "MAX_QUERY_LENGTH",
+    "MAX_SUGGEST_LIMIT",
+    "MIN_QUERY_LENGTH",
     "PAYMENT_METHOD",
+    "AddressSuggestion",
+    "AddressSuggestionsOut",
     "AdminOrderOut",
     "AppSettingsOut",
     "MoneyDecimal",

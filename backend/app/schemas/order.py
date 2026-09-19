@@ -4,10 +4,24 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    model_validator,
+)
 
 from app.models.enums import DeliveryType, OrderStatus, status_label
-from app.schemas.common import MoneyDecimal, OrderWeight, PhoneStr, ShortText, WeightDecimal
+from app.schemas.common import (
+    Latitude,
+    Longitude,
+    MoneyDecimal,
+    OrderWeight,
+    PhoneStr,
+    ShortText,
+    WeightDecimal,
+)
 from app.schemas.user import UserOut
 
 __all__ = [
@@ -24,6 +38,10 @@ PAYMENT_METHOD = "cash_on_delivery"
 
 #: Верхняя граница позиций в одном заказе — защита от «мусорных» корзин.
 MAX_ORDER_ITEMS = 50
+
+# ---------------------------------------------------------------------------
+# Координаты адреса
+# ---------------------------------------------------------------------------
 
 
 class OrderItemCreate(BaseModel):
@@ -49,8 +67,19 @@ class OrderCreate(BaseModel):
     customer_name: ShortText = Field(description="Имя получателя")
     phone: PhoneStr = Field(description="Телефон для связи")
     address: str | None = Field(default=None, max_length=512, description="Адрес доставки")
+
+    # Разобранный адрес из сервиса подсказок. Все части необязательны: подсказка
+    # может не вернуть индекс или номер дома, и это не повод отклонять заказ.
+    address_city: str | None = Field(default=None, max_length=120, description="Город")
+    address_street: str | None = Field(default=None, max_length=255, description="Улица")
+    address_house: str | None = Field(default=None, max_length=32, description="Дом и корпус")
+    address_postal_code: str | None = Field(default=None, max_length=16, description="Индекс")
+    address_lat: Latitude | None = Field(default=None, description="Широта, от -90 до 90")
+    address_lon: Longitude | None = Field(
+        default=None, description="Долгота, от -180 до 180"
+    )
+
     delivery_date: date | None = Field(default=None, description="Желаемая дата")
-    delivery_time: str | None = Field(default=None, max_length=64, description="Интервал времени")
     comment: str | None = Field(default=None, max_length=2000, description="Комментарий")
 
     @model_validator(mode="after")
@@ -106,8 +135,13 @@ class OrderOut(BaseModel):
     customer_name: str
     phone: str
     address: str | None = None
+    address_city: str | None = None
+    address_street: str | None = None
+    address_house: str | None = None
+    address_postal_code: str | None = None
+    address_lat: Latitude | None = None
+    address_lon: Longitude | None = None
     delivery_date: date | None = None
-    delivery_time: str | None = None
     comment: str | None = None
     subtotal: MoneyDecimal = Field(description="Сумма позиций")
     delivery_price: MoneyDecimal = Field(description="Стоимость доставки")

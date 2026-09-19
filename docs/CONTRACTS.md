@@ -98,8 +98,14 @@ def parse_and_verify_init_data(raw: str, bot_token: str, ttl_seconds: int) -> Te
 photo_url, is_active, created_at, updated_at)`
 
 `orders(id, order_number UNIQUE, user_id FK, status, delivery_type, customer_name, phone, address,
-delivery_date, delivery_time, comment, subtotal, delivery_price, total, stock_restored_at,
+address_city, address_street, address_house, address_postal_code, address_lat, address_lon,
+delivery_date, comment, subtotal, delivery_price, total, stock_restored_at,
 created_at, updated_at)`
+
+Колонки `address_*` заполняются из сервиса адресных подсказок и все необязательны:
+подсказка может не знать индекс или номер дома, и это не повод отклонять заказ.
+Координаты — `Numeric(9, 6)`, только `Decimal`, в JSON строкой (см. §2).
+Отдельного поля «интервал времени доставки» нет: оно удалено миграцией 0003.
 
 `order_items(id, order_id FK CASCADE, product_id FK SET NULL, product_name, weight_kg,
 price_per_kg, line_total)`
@@ -150,6 +156,7 @@ price_per_kg, line_total)`
 | POST | `/api/v1/auth/telegram` | — (initData в заголовке) | `User` |
 | GET  | `/api/v1/me` | — | `User` |
 | GET  | `/api/v1/settings` | — | `AppSettings` |
+| GET  | `/api/v1/addresses/suggest` | `query` (3–200), `limit` (1–10, по умолчанию 5) | `AddressSuggestions` |
 | GET  | `/api/v1/catalog` | `limit`, `offset` | `Page<Product>` |
 | GET  | `/api/v1/catalog/{id}` | — | `Product` |
 | POST | `/api/v1/orders` | `OrderCreate` | `Order` (201) |
@@ -184,6 +191,16 @@ price_per_kg, line_total)`
 { "delivery_price": "300.00", "pickup_address": "...", "min_weight_kg": "0.100",
   "weight_step_kg": "0.100", "currency": "RUB", "payment_note": "Оплата при получении" }
 
+// AddressSuggestions — ответ GET /api/v1/addresses/suggest.
+// Всегда 200. enabled=false означает, что подсказки выключены настройкой либо
+// не настроен ключ провайдера: поле адреса должно продолжать работать как обычный
+// текстовый ввод. Пустой items при enabled=true — короткий запрос (<3 символов)
+// или недоступный внешний сервис; это тоже не ошибка.
+{ "enabled": true, "provider": "photon",
+  "items": [ { "value": "Омск, ул. 2-я Солнечная, 31А", "city": "Омск",
+               "street": "2-я Солнечная", "house": "31А", "postal_code": "644073",
+               "lat": "54.989342", "lon": "73.368212" } ] }
+
 // Product
 { "id": 1, "name": "Говядина", "description": "...", "price_per_kg": "890.00",
   "stock_kg": "12.500", "photo_url": "/uploads/ab.jpg", "is_active": true,
@@ -192,14 +209,18 @@ price_per_kg, line_total)`
 // OrderCreate
 { "items": [ { "product_id": 1, "weight_kg": "2.0" } ],
   "delivery_type": "delivery", "customer_name": "Иван", "phone": "+79991234567",
-  "address": "ул. Ленина, 1", "delivery_date": "2026-09-08",
-  "delivery_time": "12:00-15:00", "comment": "" }
+  "address": "Омск, ул. 2-я Солнечная, 31А", "address_city": "Омск",
+  "address_street": "2-я Солнечная", "address_house": "31А",
+  "address_postal_code": "644073", "address_lat": "54.989342", "address_lon": "73.368212",
+  "delivery_date": "2026-09-08", "comment": "" }
 
 // Order  (AdminOrder = Order + "user": User)
 { "id": 1, "order_number": "ORD-20260907-00001", "status": "confirmed",
   "status_label": "Подтверждён", "delivery_type": "delivery", "customer_name": "Иван",
-  "phone": "+79991234567", "address": "ул. Ленина, 1", "delivery_date": "2026-09-08",
-  "delivery_time": "12:00-15:00", "comment": "", "subtotal": "1780.00",
+  "phone": "+79991234567", "address": "Омск, ул. 2-я Солнечная, 31А",
+  "address_city": "Омск", "address_street": "2-я Солнечная", "address_house": "31А",
+  "address_postal_code": "644073", "address_lat": "54.989342", "address_lon": "73.368212",
+  "delivery_date": "2026-09-08", "comment": "", "subtotal": "1780.00",
   "delivery_price": "300.00", "total": "2080.00", "payment_method": "cash_on_delivery",
   "items": [ { "id": 1, "product_id": 1, "product_name": "Говядина",
                "weight_kg": "2.000", "price_per_kg": "890.00", "line_total": "1780.00" } ],
@@ -222,7 +243,12 @@ price_per_kg, line_total)`
 `BOT_TOKEN`, `BOT_USERNAME`, `BOT_MODE`(polling|webhook), `WEBAPP_URL`, `PUBLIC_BASE_URL`,
 `DATABASE_URL`, `ADMIN_TELEGRAM_IDS`, `DELIVERY_PRICE`, `PICKUP_ADDRESS`, `ALLOWED_ORIGINS`,
 `UPLOAD_DIR`, `MAX_UPLOAD_SIZE_MB`, `DEV_AUTH_ENABLED`, `DEV_TELEGRAM_ID`, `ENVIRONMENT`,
-`LOG_LEVEL`, `INIT_DATA_TTL_SECONDS`, `RATE_LIMIT_AUTH`, `RATE_LIMIT_ORDERS`, `RATE_LIMIT_UPLOADS`.
+`LOG_LEVEL`, `INIT_DATA_TTL_SECONDS`, `RATE_LIMIT_AUTH`, `RATE_LIMIT_ORDERS`, `RATE_LIMIT_UPLOADS`,
+`RATE_LIMIT_ADDRESSES`, `ADDRESS_SUGGEST_PROVIDER`(photon|dadata|none), `DADATA_API_KEY`,
+`ADDRESS_SUGGEST_TIMEOUT_SECONDS`, `ADDRESS_SUGGEST_USER_AGENT`.
+
+Ключ провайдера подсказок живёт только в окружении сервера и в браузер не уходит —
+именно поэтому подсказки идут через backend-прокси, а не прямым запросом из Mini App.
 
 ## 10. Фронтенд
 

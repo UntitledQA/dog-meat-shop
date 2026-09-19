@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Numeric,
     String,
     Text,
     func,
@@ -48,6 +49,12 @@ DELIVERY_TYPE_ENUM = SAEnum(
     values_callable=lambda enum: [member.value for member in enum],
 )
 
+#: Географические координаты. Только Decimal — как деньги и вес, никакого float:
+#: двоичная дробь даёт «хвост» вида 55.75581400000001 уже на сериализации.
+#: Numeric(9, 6) — шесть знаков после точки (примерно 0.1 м на местности) и три
+#: до неё, чего ровно хватает предельной долготе 180.000000.
+COORDINATE = Numeric(9, 6)
+
 
 class Order(Base):
     __tablename__ = "orders"
@@ -71,9 +78,19 @@ class Order(Base):
 
     customer_name: Mapped[str] = mapped_column(String(255), nullable=False)
     phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: Адрес одной строкой — то, что покупатель видит и правит руками.
     address: Mapped[str | None] = mapped_column(String(512))
+
+    #: Разобранный адрес из сервиса подсказок. Все части необязательны: подсказка
+    #: может не знать индекс или номер дома, и это не повод отклонять заказ.
+    address_city: Mapped[str | None] = mapped_column(String(120))
+    address_street: Mapped[str | None] = mapped_column(String(255))
+    address_house: Mapped[str | None] = mapped_column(String(32))
+    address_postal_code: Mapped[str | None] = mapped_column(String(16))
+    address_lat: Mapped[Decimal | None] = mapped_column(COORDINATE)
+    address_lon: Mapped[Decimal | None] = mapped_column(COORDINATE)
+
     delivery_date: Mapped[date | None] = mapped_column(Date)
-    delivery_time: Mapped[str | None] = mapped_column(String(64))
     comment: Mapped[str | None] = mapped_column(Text)
 
     subtotal: Mapped[Decimal] = mapped_column(MONEY, nullable=False)

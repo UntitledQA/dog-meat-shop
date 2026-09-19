@@ -17,7 +17,6 @@ function form(overrides: Partial<CheckoutFormValues> = {}): CheckoutFormValues {
     deliveryType: 'delivery',
     address: 'ул. Ленина, 1',
     deliveryDate: '2026-09-09',
-    deliveryTime: '13:00-16:00',
     comment: '',
     ...overrides,
   };
@@ -78,7 +77,7 @@ describe('validateCheckout — имя и телефон', () => {
   });
 });
 
-describe('validateCheckout — дата и интервал', () => {
+describe('validateCheckout — дата', () => {
   it('дата в прошлом — ошибка', () => {
     const errors = validateCheckout(form({ deliveryDate: '2026-09-07' }), { now: NOW });
     expect(errors.deliveryDate).toBe('Дата не может быть в прошлом');
@@ -87,11 +86,6 @@ describe('validateCheckout — дата и интервал', () => {
   it('сегодняшняя дата допустима', () => {
     const errors = validateCheckout(form({ deliveryDate: '2026-09-08' }), { now: NOW });
     expect(errors.deliveryDate).toBeUndefined();
-  });
-
-  it('интервал вне списка — ошибка', () => {
-    const errors = validateCheckout(form({ deliveryTime: '01:00-02:00' }), { now: NOW });
-    expect(errors.deliveryTime).toBe('Выберите интервал из списка');
   });
 });
 
