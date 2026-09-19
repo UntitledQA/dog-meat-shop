@@ -383,3 +383,36 @@ async def test_limit_is_passed_to_provider_and_applied(client, user_headers, pho
 
     assert stub.calls == [("Тверская улица", 1)]
     assert len(response.json()["items"]) == 1
+
+
+async def test_photon_request_does_not_send_lang(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Публичный Photon не знает lang=ru и отвечает 400.
+
+    Параметр поддерживается только для default/de/en/fr, а на `ru` сервис отдаёт
+    400 Bad Request — подсказки при этом молча приходили пустыми. Режим по
+    умолчанию и так отдаёт названия на местном языке. Тест сторожит, чтобы
+    параметр не вернулся незаметно.
+    """
+    captured: dict[str, object] = {}
+
+    class _Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self, **_kwargs: object) -> dict[str, object]:
+            return {"features": []}
+
+    class _Client:
+        async def get(self, url: str, params: dict[str, object] | None = None) -> _Response:
+            captured["url"] = url
+            captured["params"] = params or {}
+            return _Response()
+
+    monkeypatch.setattr(address_service, "get_client", lambda: _Client())
+
+    await address_service._request_photon("Омск Солнечная", 5)
+
+    assert captured["url"] == address_service.PHOTON_URL
+    assert "lang" not in captured["params"]
+    assert captured["params"]["q"] == "Омск Солнечная"
+    assert captured["params"]["limit"] == 5

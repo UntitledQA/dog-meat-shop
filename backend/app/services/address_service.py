@@ -56,7 +56,10 @@ PROVIDER_NONE = "none"
 
 #: Photon (OpenStreetMap) — бесплатный, без ключа, сделан под автодополнение.
 PHOTON_URL = "https://photon.komoot.io/api/"
-PHOTON_LANG = "ru"
+#: Язык ответа Photon НЕ задаём. Публичный инстанс принимает только
+#: default, de, en и fr, а на `lang=ru` отвечает 400 Bad Request — из-за чего
+#: подсказки молча приходили пустыми. Режим по умолчанию отдаёт названия на
+#: местном языке, то есть для российских адресов как раз по-русски.
 
 #: DaData — лучшее качество по российским адресам, но только с ключом.
 DADATA_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address"
@@ -124,7 +127,7 @@ async def _request_photon(query: str, limit: int) -> Any:
     """GET к Photon. Ключ не нужен, но User-Agent обязателен по правилам сервиса."""
     response = await get_client().get(
         PHOTON_URL,
-        params={"q": query, "lang": PHOTON_LANG, "limit": limit},
+        params={"q": query, "limit": limit},
     )
     response.raise_for_status()
     # parse_float=Decimal: числа не проходят через float ни на мгновение.
