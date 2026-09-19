@@ -73,6 +73,7 @@ export function AddressAutocomplete({
 
   // Сервис могли выключить на бэкенде — тогда ведём себя как обычное поле.
   const serviceEnabled = suggestions.data ? suggestions.data.enabled : true;
+
   const items: AddressSuggestion[] = serviceEnabled ? (suggestions.data?.items ?? []) : [];
 
   const longEnough = query.length >= ADDRESS_SUGGEST_MIN_LENGTH;

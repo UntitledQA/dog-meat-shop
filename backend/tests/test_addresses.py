@@ -416,3 +416,16 @@ async def test_photon_request_does_not_send_lang(monkeypatch: pytest.MonkeyPatch
     assert "lang" not in captured["params"]
     assert captured["params"]["q"] == "Омск Солнечная"
     assert captured["params"]["limit"] == 5
+
+
+def test_suggestions_are_disabled_by_default() -> None:
+    """Без явной настройки подсказки выключены.
+
+    Включение отправляет набранный покупателем адрес стороннему сервису —
+    это осознанный выбор владельца магазина, а не значение по умолчанию.
+    Тест сторожит, чтобы провайдер не включился обратно незаметно.
+    """
+    from app.core.config import Settings
+
+    assert Settings.model_fields["address_suggest_provider"].default == "none"
+    assert Settings.model_fields["dadata_api_key"].default == ""

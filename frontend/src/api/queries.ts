@@ -75,22 +75,41 @@ export function useSettings(): UseQueryResult<AppSettings, unknown> {
  * `enabled` позволяет вызывающему коду дополнительно погасить его (например,
  * пока выпадающий список закрыт).
  */
+/**
+ * Подсказки выключены на бэкенде — запомнили на весь сеанс.
+ *
+ * Ответ `enabled: false` одинаков для всех полей адреса и не меняется, пока
+ * приложение открыто. Без этой защёлки поле слало бы запрос на каждую
+ * введённую букву и получало заведомо пустой список.
+ */
+let suggestionsDisabled = false;
+
+/** Сбрасывает защёлку. Нужен тестам: модульное состояние переживает размонтирование. */
+export function resetAddressSuggestionsState(): void {
+  suggestionsDisabled = false;
+}
+
 export function useAddressSuggestions(
   query: string,
   options: { enabled?: boolean; limit?: number } = {},
 ): UseQueryResult<AddressSuggestions, unknown> {
   const text = query.trim();
   const limit = options.limit ?? ADDRESS_SUGGEST_LIMIT;
-  return useQuery({
+  const result = useQuery({
     queryKey: queryKeys.addressSuggestions(text, limit),
     queryFn: ({ signal }) => api.suggestAddresses(text, { limit, signal }),
     enabled:
+      !suggestionsDisabled &&
       (options.enabled ?? true) &&
       text.length >= ADDRESS_SUGGEST_MIN_LENGTH &&
       text.length <= ADDRESS_SUGGEST_MAX_LENGTH,
     retry: retryPolicy,
     staleTime: 5 * 60 * 1000,
   });
+
+  if (result.data && !result.data.enabled) suggestionsDisabled = true;
+
+  return result;
 }
 
 export function useCatalog(params: PageParams = {}): UseQueryResult<Page<Product>, unknown> {

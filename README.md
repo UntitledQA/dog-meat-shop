@@ -530,7 +530,7 @@ docker compose up -d --force-recreate backend bot   # Docker
 | `RATE_LIMIT_ORDERS`     | Лимит создания заказов, «запросов/секунд»                                  | `10/60`                                                   | нет (`10/60`) |
 | `RATE_LIMIT_UPLOADS`    | Лимит загрузки файлов, «запросов/секунд»                                   | `20/60`                                                   | нет (`20/60`) |
 | `RATE_LIMIT_ADDRESSES`  | Лимит подсказок адреса, «запросов/секунд»                                  | `60/60`                                                   | нет (`60/60`) |
-| `ADDRESS_SUGGEST_PROVIDER` | Провайдер подсказок адреса: `photon` (бесплатный, без ключа), `dadata` (нужен ключ), `none` (выключено) | `photon`         | нет (`photon`) |
+| `ADDRESS_SUGGEST_PROVIDER` | Подсказки адреса: `none` (выключены), `photon` (бесплатный, без ключа), `dadata` (нужен ключ) | `none`           | нет (`none`) |
 | `DADATA_API_KEY`        | Ключ DaData. Только на сервере, в браузер не уходит. Пусто при `dadata` = подсказки выключены | —                       | при `dadata` |
 | `ADDRESS_SUGGEST_TIMEOUT_SECONDS` | Таймаут запроса к сервису подсказок, секунды                     | `3`                                                       | нет (`3`) |
 | `ADDRESS_SUGGEST_USER_AGENT` | Чем представляться сервису подсказок — Photon требует осмысленный User-Agent | `MeatForDogsShop/1.0 (Telegram Mini App)`   | нет |

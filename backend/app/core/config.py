@@ -61,10 +61,15 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = Field(default=5, alias="MAX_UPLOAD_SIZE_MB")
 
     # --- подсказки адресов (внешний сервис) ---
-    #: photon — бесплатный OpenStreetMap-провайдер без ключа (по умолчанию),
-    #: dadata — лучшее качество по РФ, но требует DADATA_API_KEY,
-    #: none — подсказки выключены.
-    address_suggest_provider: str = Field(default="photon", alias="ADDRESS_SUGGEST_PROVIDER")
+    #: none — подсказки выключены (по умолчанию), поле адреса работает как
+    #:        обычный текстовый ввод;
+    #: photon — бесплатный OpenStreetMap-провайдер без ключа;
+    #: dadata — лучшее качество по РФ, но требует DADATA_API_KEY.
+    #:
+    #: Выключено по умолчанию сознательно: включение отправляет то, что
+    #: покупатель набирает в поле адреса, стороннему сервису. Это осознанный
+    #: выбор владельца магазина, а не то, что должно включаться само.
+    address_suggest_provider: str = Field(default="none", alias="ADDRESS_SUGGEST_PROVIDER")
     #: Ключ DaData. Живёт ТОЛЬКО на сервере и никогда не уходит в браузер —
     #: ради этого подсказки и сделаны прокси-эндпоинтом, а не прямым запросом
     #: из Mini App. По умолчанию пуст: без ключа подсказки просто выключены.

@@ -46,6 +46,8 @@ if [ -f "$APP_DIR/.env" ]; then
     ADMIN_TELEGRAM_IDS="${ADMIN_TELEGRAM_IDS:-$(from_env ADMIN_TELEGRAM_IDS)}"
     DELIVERY_PRICE="${DELIVERY_PRICE:-$(from_env DELIVERY_PRICE)}"
     PICKUP_ADDRESS="${PICKUP_ADDRESS:-$(from_env PICKUP_ADDRESS)}"
+    ADDRESS_SUGGEST_PROVIDER="${ADDRESS_SUGGEST_PROVIDER:-$(from_env ADDRESS_SUGGEST_PROVIDER)}"
+    DADATA_API_KEY="${DADATA_API_KEY:-$(from_env DADATA_API_KEY)}"
     # Пароль базы переиспользуем всегда: том с данными уже создан под него.
     PG_PASS="$(from_env POSTGRES_PASSWORD)"
 fi
@@ -55,6 +57,10 @@ done
 PG_PASS="${PG_PASS:-$(head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 32)}"
 DELIVERY_PRICE="${DELIVERY_PRICE:-300.00}"
 PICKUP_ADDRESS="${PICKUP_ADDRESS:-Уточните адрес самовывоза}"
+# Подсказки адреса выключены, пока владелец магазина не выберет провайдера:
+# включение отправляет набранный покупателем адрес стороннему сервису.
+ADDRESS_SUGGEST_PROVIDER="${ADDRESS_SUGGEST_PROVIDER:-none}"
+DADATA_API_KEY="${DADATA_API_KEY:-}"
 
 # ---------------------------------------------------------------- 2. пакеты
 # Ставим только недостающее. Скопом нельзя: если Node пришёл из репозитория
@@ -156,6 +162,11 @@ DATABASE_URL=postgresql+asyncpg://${APP_USER}:${PG_PASS}@127.0.0.1:5432/meat
 
 DELIVERY_PRICE=${DELIVERY_PRICE}
 PICKUP_ADDRESS=${PICKUP_ADDRESS}
+
+# Подсказки адреса: none | photon | dadata. Ключ DaData никогда не уходит
+# в браузер — запрос идёт через backend-прокси.
+ADDRESS_SUGGEST_PROVIDER=${ADDRESS_SUGGEST_PROVIDER}
+DADATA_API_KEY=${DADATA_API_KEY}
 
 UPLOAD_DIR=${STATE_DIR}/uploads
 MAX_UPLOAD_SIZE_MB=5

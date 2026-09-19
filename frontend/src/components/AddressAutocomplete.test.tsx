@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { resetAddressSuggestionsState } from '../api/queries';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import type { AddressSuggestion, AddressSuggestions } from '../api/types';
 
@@ -99,6 +100,9 @@ async function waitForAnswer(fetchMock: ReturnType<typeof installFetch>) {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  // Защёлка «подсказки выключены» модульная и переживает размонтирование —
+  // без сброса тест с enabled: false обесточил бы все следующие.
+  resetAddressSuggestionsState();
 });
 
 /**
@@ -295,6 +299,24 @@ describe('AddressAutocomplete — состояния сервиса', () => {
 
     await user.type(input, ', 31');
     expect(input).toHaveValue('Омск, 31');
+  });
+
+  it('узнав, что подсказки выключены, больше не спрашивает сервер', async () => {
+    const fetchMock = installFetch({ enabled: false, provider: 'none', items: [] });
+    const user = userEvent.setup();
+    const { input } = renderField();
+
+    await user.type(input, 'Омск');
+    await waitForAnswer(fetchMock);
+    const afterFirst = fetchMock.mock.calls.length;
+    expect(afterFirst).toBeGreaterThan(0);
+
+    // Дальнейший ввод не должен порождать новых запросов: ответ заведомо пустой.
+    await user.type(input, ', улица Ленина, 15');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    expect(fetchMock.mock.calls.length).toBe(afterFirst);
+    expect(input).toHaveValue('Омск, улица Ленина, 15');
   });
 
   it('ошибка сети не ломает ввод', async () => {
