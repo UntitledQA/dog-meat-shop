@@ -57,10 +57,25 @@ DELIVERY_PRICE="${DELIVERY_PRICE:-300.00}"
 PICKUP_ADDRESS="${PICKUP_ADDRESS:-Уточните адрес самовывоза}"
 
 # ---------------------------------------------------------------- 2. пакеты
+# Ставим только недостающее. Скопом нельзя: если Node пришёл из репозитория
+# NodeSource, пакет npm из репозитория Ubuntu конфликтует с ним и apt падает.
 log "Проверяю системные пакеты"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq git curl rsync nginx postgresql certbot nodejs npm dnsutils >/dev/null
+declare -A NEEDS=(
+    [git]=git [curl]=curl [rsync]=rsync [nginx]=nginx
+    [psql]=postgresql [certbot]=certbot [node]=nodejs [npm]=npm [dig]=dnsutils
+)
+MISSING=()
+for cmd in "${!NEEDS[@]}"; do
+    command -v "$cmd" >/dev/null 2>&1 || MISSING+=("${NEEDS[$cmd]}")
+done
+if [ ${#MISSING[@]} -gt 0 ]; then
+    echo "    ставлю: ${MISSING[*]}"
+    apt-get update -qq
+    apt-get install -y -qq "${MISSING[@]}" >/dev/null
+else
+    echo "    всё на месте"
+fi
 systemctl enable --now nginx postgresql >/dev/null 2>&1 || true
 
 # ------------------------------------------------------------------- 3. DNS
