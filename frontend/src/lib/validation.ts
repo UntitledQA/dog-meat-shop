@@ -3,7 +3,7 @@
  * Все сообщения — на русском, ключи совпадают с именами полей формы.
  */
 
-import type { DeliveryType } from '../api/types';
+import type { DeliveryType, ProductCategory } from '../api/types';
 
 export interface CheckoutFormValues {
   customerName: string;
@@ -134,6 +134,8 @@ export function validateCheckout(
 export interface ProductFormValues {
   name: string;
   description: string;
+  /** Пустая строка — «без категории» (в payload уходит как null). */
+  category: ProductCategory | '';
   pricePerKg: string;
   stockKg: string;
   photoUrl: string;

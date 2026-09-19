@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFoundError
 from app.core.logging import get_logger
-from app.models import Product
+from app.models import Product, ProductCategory
 from app.repositories.product_repo import ProductRepository
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.services.upload_service import remove_photo_if_unused, save_image
@@ -30,12 +30,14 @@ async def list_products(
     *,
     include_inactive: bool = False,
     search: str | None = None,
+    category: ProductCategory | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[list[Product], int]:
     return await ProductRepository(session).list_all(
         include_inactive=include_inactive,
         search=search,
+        category=category,
         limit=limit,
         offset=offset,
     )
@@ -54,6 +56,7 @@ async def create_product(session: AsyncSession, payload: ProductCreate) -> Produ
         product = await products.create(
             name=payload.name,
             description=payload.description,
+            category=payload.category,
             price_per_kg=payload.price_per_kg,
             stock_kg=payload.stock_kg,
             photo_url=payload.photo_url,

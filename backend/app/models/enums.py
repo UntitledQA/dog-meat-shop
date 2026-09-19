@@ -17,6 +17,23 @@ class DeliveryType(str, Enum):
     PICKUP = "pickup"
 
 
+class ProductCategory(str, Enum):
+    """Категория товара каталога.
+
+    Значения — латинские slug (как у OrderStatus/DeliveryType): в БД хранится slug,
+    покупателю показывается русская подпись из CATEGORY_LABELS. Набор фиксированный;
+    новая категория добавляется сюда И в миграцию (VARCHAR + CHECK). Порядок членов
+    задаёт порядок отображения в каталоге и админке.
+    """
+
+    BEEF = "beef"
+    VEAL = "veal"
+    HORSE_MEAT = "horse-meat"
+    DUCK = "duck"
+    FISH = "fish"
+    DRIED_TREATS = "dried-treats"
+
+
 STATUS_LABELS: dict[OrderStatus, str] = {
     OrderStatus.CONFIRMED: "Подтверждён",
     OrderStatus.DELIVERING: "Доставляется",
@@ -28,6 +45,21 @@ DELIVERY_TYPE_LABELS: dict[DeliveryType, str] = {
     DeliveryType.DELIVERY: "Доставка",
     DeliveryType.PICKUP: "Самовывоз",
 }
+
+#: Русские подписи категорий для витрины, бота и админки.
+CATEGORY_LABELS: dict[ProductCategory, str] = {
+    ProductCategory.BEEF: "Говядина",
+    ProductCategory.VEAL: "Телятина",
+    ProductCategory.HORSE_MEAT: "Конина",
+    ProductCategory.DUCK: "Утка",
+    ProductCategory.FISH: "Рыба",
+    ProductCategory.DRIED_TREATS: "Сушёные лакомства",
+}
+
+
+def category_label(category: ProductCategory) -> str:
+    """Русское название категории; для неизвестного значения — сам slug."""
+    return CATEGORY_LABELS.get(category, category.value)
 
 #: Разрешённые переходы.
 #:

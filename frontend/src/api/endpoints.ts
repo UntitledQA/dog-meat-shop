@@ -10,6 +10,7 @@ import type {
   AdminOrderListParams,
   AdminProductListParams,
   AppSettings,
+  CatalogListParams,
   Order,
   OrderCreate,
   OrderStatus,
@@ -58,9 +59,13 @@ export function suggestAddresses(
 }
 
 /** GET /api/v1/catalog */
-export function getCatalog(params: PageParams = {}): Promise<Page<Product>> {
+export function getCatalog(params: CatalogListParams = {}): Promise<Page<Product>> {
   return request<Page<Product>>(p('/catalog'), {
-    query: { limit: params.limit, offset: params.offset },
+    query: {
+      limit: params.limit,
+      offset: params.offset,
+      category: params.category ?? undefined,
+    },
   });
 }
 
@@ -94,6 +99,7 @@ export function getAdminProducts(params: AdminProductListParams = {}): Promise<P
     query: {
       include_inactive: params.include_inactive,
       search: params.search,
+      category: params.category ?? undefined,
       limit: params.limit,
       offset: params.offset,
     },

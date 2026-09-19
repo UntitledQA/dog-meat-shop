@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
+from app.models.enums import ProductCategory
 from app.schemas.common import (
     MoneyDecimal,
     NonNegativeMoney,
@@ -26,6 +27,7 @@ class ProductOut(BaseModel):
     id: int
     name: str
     description: str | None = None
+    category: ProductCategory | None = Field(default=None, description="Категория товара")
     price_per_kg: MoneyDecimal = Field(description="Цена за килограмм")
     stock_kg: WeightDecimal = Field(description="Остаток на складе, кг")
     photo_url: str | None = Field(default=None, description="Относительный путь к фото")
@@ -46,6 +48,7 @@ class ProductCreate(BaseModel):
 
     name: ShortText = Field(description="Название товара")
     description: str | None = Field(default=None, max_length=4000)
+    category: ProductCategory | None = Field(default=None, description="Категория товара")
     price_per_kg: NonNegativeMoney = Field(description="Цена за килограмм, >= 0")
     stock_kg: NonNegativeWeight = Field(default=Decimal("0"), description="Остаток, кг, >= 0")
     photo_url: str | None = Field(default=None, max_length=512)
@@ -61,14 +64,15 @@ _NOT_NULLABLE_FIELDS = ("name", "price_per_kg", "stock_kg", "is_active")
 class ProductUpdate(BaseModel):
     """Частичное обновление товара: передаются только изменяемые поля.
 
-    Отсутствие поля означает «не менять». Явный `null` допустим только для
-    `description` и `photo_url` — так поле очищается.
+    Отсутствие поля означает «не менять». Явный `null` допустим для
+    `description`, `photo_url` и `category` — так поле очищается.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: ShortText | None = Field(default=None)
     description: str | None = Field(default=None, max_length=4000)
+    category: ProductCategory | None = Field(default=None)
     price_per_kg: NonNegativeMoney | None = Field(default=None)
     stock_kg: NonNegativeWeight | None = Field(default=None)
     photo_url: str | None = Field(default=None, max_length=512)

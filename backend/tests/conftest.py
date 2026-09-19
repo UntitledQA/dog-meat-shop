@@ -59,7 +59,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.core.db import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Product, User  # noqa: E402
+from app.models import Product, ProductCategory, User  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Подпись initData
@@ -228,10 +228,12 @@ async def make_product(session: AsyncSession):
         is_active: bool = True,
         description: str | None = "Свежая говядина для собак",
         photo_url: str | None = None,
+        category: ProductCategory | str | None = None,
     ) -> Product:
         product = Product(
             name=name,
             description=description,
+            category=ProductCategory(category) if category is not None else None,
             price_per_kg=Decimal(price_per_kg),
             stock_kg=Decimal(stock_kg),
             photo_url=photo_url,

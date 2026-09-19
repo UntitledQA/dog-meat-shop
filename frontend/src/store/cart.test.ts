@@ -14,6 +14,7 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
     id: 1,
     name: 'Говядина',
     description: null,
+    category: null,
     price_per_kg: '890.00',
     stock_kg: '12.500',
     photo_url: null,

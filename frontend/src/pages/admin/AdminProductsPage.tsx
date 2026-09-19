@@ -6,6 +6,7 @@ import { useToast } from '../../components/ToastContext';
 import { errorMessage } from '../../api/client';
 import { useAdminProducts, useToggleProductActive } from '../../api/queries';
 import type { Product } from '../../api/types';
+import { categoryLabel } from '../../lib/categories';
 import { formatPricePerKg, formatWeight, hasSellableStock } from '../../lib/money';
 import { haptic, showConfirm } from '../../telegram/webapp';
 
@@ -105,6 +106,9 @@ export function AdminProductsPage() {
                         {formatWeight(product.stock_kg)}
                       </div>
                       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                        {product.category ? (
+                          <span className="badge">{categoryLabel(product.category)}</span>
+                        ) : null}
                         {product.is_active ? null : <span className="badge badge--muted">Скрыт</span>}
                         {hasSellableStock(product.stock_kg) ? null : (
                           <span className="badge badge--cancelled">Нет остатка</span>

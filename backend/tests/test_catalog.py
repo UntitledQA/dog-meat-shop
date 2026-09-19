@@ -83,6 +83,64 @@ async def test_catalog_pagination(client, user_headers, make_product) -> None:
     assert body["offset"] == 2
 
 
+# ---------------------------------------------------------------------------
+# Фильтр по категории
+# ---------------------------------------------------------------------------
+
+
+async def test_catalog_filters_by_category(client, user_headers, make_product) -> None:
+    """`?category=<slug>` оставляет только товары этой категории."""
+    await make_product(name="Говядина", category="beef")
+    await make_product(name="Утка", category="duck")
+    await make_product(name="Без категории")  # по умолчанию category=None
+
+    body = (await client.get(f"{PREFIX}/catalog?category=beef", headers=user_headers)).json()
+
+    assert [item["name"] for item in body["items"]] == ["Говядина"]
+    assert body["total"] == 1
+    assert body["items"][0]["category"] == "beef"
+
+
+async def test_catalog_filter_matches_hyphenated_slug(
+    client, user_headers, make_product
+) -> None:
+    """Slug с дефисом (`horse-meat`) как query-параметр тоже валиден."""
+    await make_product(name="Конина", category="horse-meat")
+    await make_product(name="Рыба", category="fish")
+
+    body = (
+        await client.get(f"{PREFIX}/catalog?category=horse-meat", headers=user_headers)
+    ).json()
+
+    assert [item["name"] for item in body["items"]] == ["Конина"]
+    assert body["total"] == 1
+
+
+async def test_catalog_without_category_returns_all_active(
+    client, user_headers, make_product
+) -> None:
+    """Без параметра — все активные товары, включая товары без категории."""
+    await make_product(name="С категорией", category="beef")
+    await make_product(name="Без категории")
+
+    body = (await client.get(f"{PREFIX}/catalog", headers=user_headers)).json()
+
+    assert {item["name"] for item in body["items"]} == {"С категорией", "Без категории"}
+    assert body["total"] == 2
+
+
+async def test_catalog_invalid_category_returns_422(
+    client, user_headers, make_product
+) -> None:
+    """Неизвестный slug в query — единый 422, а не пустой список."""
+    await make_product(name="Говядина", category="beef")
+
+    response = await client.get(f"{PREFIX}/catalog?category=chicken", headers=user_headers)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
 async def test_single_product_available(client, user_headers, make_product) -> None:
     product = await make_product(name="Куриные шеи", description="Хрустящие")
 

@@ -58,11 +58,21 @@ export interface AddressSuggestions {
   items: AddressSuggestion[];
 }
 
+/** Категории товаров (slug). Русские подписи — в src/lib/categories.ts. */
+export type ProductCategory =
+  | 'beef'
+  | 'veal'
+  | 'horse-meat'
+  | 'duck'
+  | 'fish'
+  | 'dried-treats';
+
 /** Product */
 export interface Product {
   id: number;
   name: string;
   description: string | null;
+  category: ProductCategory | null;
   price_per_kg: DecimalString;
   stock_kg: DecimalString;
   photo_url: string | null;
@@ -144,6 +154,7 @@ export interface OrderCreate {
 export interface ProductCreate {
   name: string;
   description?: string | null;
+  category?: ProductCategory | null;
   price_per_kg: DecimalString;
   stock_kg: DecimalString;
   photo_url?: string | null;
@@ -189,9 +200,15 @@ export interface PageParams {
   offset?: number;
 }
 
+/** Параметры каталога покупателя: пагинация + необязательный фильтр по категории. */
+export interface CatalogListParams extends PageParams {
+  category?: ProductCategory | null;
+}
+
 export interface AdminProductListParams extends PageParams {
   include_inactive?: boolean;
   search?: string;
+  category?: ProductCategory | null;
 }
 
 export interface AdminOrderListParams extends PageParams {

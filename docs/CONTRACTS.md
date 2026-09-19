@@ -94,8 +94,8 @@ def parse_and_verify_init_data(raw: str, bot_token: str, ttl_seconds: int) -> Te
 
 `users(id, telegram_id UNIQUE, username, first_name, last_name, phone, is_admin, created_at, updated_at)`
 
-`products(id, name NOT NULL, description, price_per_kg NUMERIC(10,2) >= 0, stock_kg NUMERIC(10,3) >= 0,
-photo_url, is_active, created_at, updated_at)`
+`products(id, name NOT NULL, description, category, price_per_kg NUMERIC(10,2) >= 0,
+stock_kg NUMERIC(10,3) >= 0, photo_url, is_active, created_at, updated_at)`
 
 `orders(id, order_number UNIQUE, user_id FK, status, delivery_type, customer_name, phone, address,
 address_city, address_street, address_house, address_postal_code, address_lat, address_lon,
@@ -117,6 +117,12 @@ price_per_kg, line_total)`
   Колонка — VARCHAR(20) + CHECK; enum объявлен с `create_constraint=True`,
   без него SQLAlchemy 1.4+ ограничение не создаёт.
 * `DeliveryType`: `delivery | pickup`
+* `ProductCategory` (необязательное поле товара `category`):
+  `beef | veal | horse-meat | duck | fish | dried-treats`
+  (подписи: «Говядина», «Телятина», «Конина», «Утка», «Рыба», «Сушёные лакомства»).
+  Колонка — VARCHAR(32) + CHECK, **nullable**; enum объявлен с `create_constraint=True`.
+  Товар без категории (`null`) допустим и остаётся видимым в каталоге. Набор фиксирован
+  в коде (как статусы), новая категория добавляется значением enum + миграцией.
 * `order_number` = `ORD-YYYYMMDD-NNNNN` (NNNNN — id заказа с ведущими нулями): уникально без гонок.
 * `stock_restored_at` — метка возврата остатка, гарантирует однократность возврата.
 
@@ -157,7 +163,7 @@ price_per_kg, line_total)`
 | GET  | `/api/v1/me` | — | `User` |
 | GET  | `/api/v1/settings` | — | `AppSettings` |
 | GET  | `/api/v1/addresses/suggest` | `query` (3–200), `limit` (1–10, по умолчанию 5) | `AddressSuggestions` |
-| GET  | `/api/v1/catalog` | `limit`, `offset` | `Page<Product>` |
+| GET  | `/api/v1/catalog` | `limit`, `offset`, `category` (slug, необязательно) | `Page<Product>` |
 | GET  | `/api/v1/catalog/{id}` | — | `Product` |
 | POST | `/api/v1/orders` | `OrderCreate` | `Order` (201) |
 | GET  | `/api/v1/orders` | `limit`, `offset` | `Page<Order>` |
@@ -166,7 +172,7 @@ price_per_kg, line_total)`
 ### Администратор (все требуют `AdminUser`)
 | Метод | Путь | Параметры | Ответ |
 |---|---|---|---|
-| GET   | `/api/v1/admin/products` | `include_inactive`, `search`, `limit`, `offset` | `Page<Product>` |
+| GET   | `/api/v1/admin/products` | `include_inactive`, `search`, `category`, `limit`, `offset` | `Page<Product>` |
 | POST  | `/api/v1/admin/products` | `ProductCreate` | `Product` (201) |
 | PATCH | `/api/v1/admin/products/{id}` | `ProductUpdate` (partial) | `Product` |
 | POST  | `/api/v1/admin/products/{id}/archive` | — | `Product` |
@@ -201,10 +207,10 @@ price_per_kg, line_total)`
                "street": "2-я Солнечная", "house": "31А", "postal_code": "644073",
                "lat": "54.989342", "lon": "73.368212" } ] }
 
-// Product
-{ "id": 1, "name": "Говядина", "description": "...", "price_per_kg": "890.00",
-  "stock_kg": "12.500", "photo_url": "/uploads/ab.jpg", "is_active": true,
-  "in_stock": true, "created_at": "...", "updated_at": "..." }
+// Product  (category — slug ProductCategory или null; см. §5)
+{ "id": 1, "name": "Говядина", "description": "...", "category": "beef",
+  "price_per_kg": "890.00", "stock_kg": "12.500", "photo_url": "/uploads/ab.jpg",
+  "is_active": true, "in_stock": true, "created_at": "...", "updated_at": "..." }
 
 // OrderCreate
 { "items": [ { "product_id": 1, "weight_kg": "2.0" } ],

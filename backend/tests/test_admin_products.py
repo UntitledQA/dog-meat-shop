@@ -174,6 +174,87 @@ async def test_partial_update_keeps_other_fields(client, admin_headers, make_pro
 
 
 # ---------------------------------------------------------------------------
+# Категории
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("category", ["beef", "veal", "horse-meat", "dried-treats"])
+async def test_admin_creates_product_with_category(
+    client, admin_headers, category: str
+) -> None:
+    """Категория сохраняется и возвращается slug'ом — в т.ч. с дефисом."""
+    response = await client.post(
+        f"{PREFIX}/admin/products",
+        json={
+            "name": "Товар с категорией",
+            "price_per_kg": "100.00",
+            "stock_kg": "1",
+            "category": category,
+        },
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["category"] == category
+
+
+async def test_admin_creates_product_without_category(client, admin_headers) -> None:
+    """Поле не передано — товар остаётся без категории (null)."""
+    response = await client.post(
+        f"{PREFIX}/admin/products",
+        json={"name": "Без категории", "price_per_kg": "100.00", "stock_kg": "1"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["category"] is None
+
+
+async def test_admin_updates_category(client, admin_headers, make_product) -> None:
+    product = await make_product(category="beef")
+
+    response = await client.patch(
+        f"{PREFIX}/admin/products/{product.id}",
+        json={"category": "duck"},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["category"] == "duck"
+
+
+async def test_admin_clears_category_with_null(client, admin_headers, make_product) -> None:
+    """Явный null очищает категорию — она обнуляемая (в отличие от name/price)."""
+    product = await make_product(category="fish")
+
+    response = await client.patch(
+        f"{PREFIX}/admin/products/{product.id}",
+        json={"category": None},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["category"] is None
+
+
+async def test_invalid_category_on_create_is_rejected(client, admin_headers) -> None:
+    """Неизвестный slug — единый 422, а не 500."""
+    response = await client.post(
+        f"{PREFIX}/admin/products",
+        json={
+            "name": "Товар",
+            "price_per_kg": "100.00",
+            "stock_kg": "1",
+            "category": "chicken",
+        },
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+# ---------------------------------------------------------------------------
 # Скрытие и восстановление
 # ---------------------------------------------------------------------------
 

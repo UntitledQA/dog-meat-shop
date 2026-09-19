@@ -6,6 +6,7 @@ import {
   formatWeight,
   hasSellableStock,
 } from '../lib/money';
+import { categoryLabel } from '../lib/categories';
 import type { Product } from '../api/types';
 
 export interface ProductCardProps {
@@ -26,6 +27,9 @@ export function ProductCard({ product, onAdd, busy = false }: ProductCardProps) 
       </Link>
 
       <div className="product-card__body">
+        {product.category ? (
+          <div className="product-card__category">{categoryLabel(product.category)}</div>
+        ) : null}
         <Link className="product-card__name" to={'/product/' + product.id}>
           {product.name}
         </Link>

@@ -4,7 +4,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -37,6 +37,7 @@ const product: Product = {
   id: 1,
   name: 'Говядина',
   description: 'Свежая говядина',
+  category: null,
   price_per_kg: '890.00',
   stock_kg: '12.500',
   photo_url: null,
@@ -139,7 +140,71 @@ describe('маршруты покупателя', () => {
 
   it('/ — каталог показывает товары', async () => {
     renderRoute('/');
-    expect(await screen.findByText('Говядина')).toBeInTheDocument();
+    // «Говядина» встречается и как название товара, и как чип категории,
+    // поэтому проверяем уникальную кнопку карточки.
+    expect(await screen.findByRole('button', { name: 'В корзину' })).toBeEnabled();
+  });
+
+  it('/ — есть фильтр категорий, по умолчанию активна «Все»', async () => {
+    renderRoute('/');
+    await screen.findByRole('button', { name: 'В корзину' });
+
+    expect(screen.getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true');
+    // Чипы категорий отрисованы с русскими подписями.
+    expect(screen.getByRole('button', { name: 'Телятина' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Сушёные лакомства' })).toBeInTheDocument();
+  });
+
+  it('/?category=beef — deep-link отмечает чип и уходит в запрос каталога', async () => {
+    const fetchMock = installFetch();
+    renderRoute('/?category=beef');
+    await screen.findByRole('button', { name: 'В корзину' });
+
+    // Чип категории активен, «Все» — нет.
+    expect(screen.getByRole('button', { name: 'Говядина' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'false');
+
+    // В запрос каталога передан category=beef.
+    const catalogCall = fetchMock.mock.calls.find(
+      ([url]) => String(url).includes('/api/v1/catalog') && String(url).includes('category=beef'),
+    );
+    expect(catalogCall).toBeDefined();
+  });
+
+  it('/?category=НЕВАЛИД — неизвестный slug трактуется как «Все»', async () => {
+    const fetchMock = installFetch();
+    renderRoute('/?category=not-a-real-category');
+    await screen.findByRole('button', { name: 'В корзину' });
+
+    expect(screen.getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true');
+
+    // Запрос каталога ушёл без параметра category.
+    const catalogCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes('/api/v1/catalog'),
+    );
+    expect(catalogCall).toBeDefined();
+    expect(String(catalogCall?.[0])).not.toContain('category=');
+  });
+
+  it('/ — клик по чипу фильтрует каталог по категории', async () => {
+    const user = userEvent.setup();
+    const fetchMock = installFetch();
+    renderRoute('/');
+    await screen.findByRole('button', { name: 'В корзину' });
+
+    await user.click(screen.getByRole('button', { name: 'Утка' }));
+
+    expect(screen.getByRole('button', { name: 'Утка' })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url]) =>
+          String(url).includes('/api/v1/catalog') && String(url).includes('category=duck'),
+      );
+      expect(call).toBeDefined();
+    });
   });
 
   it('/product/:id — карточка товара с выбором веса', async () => {

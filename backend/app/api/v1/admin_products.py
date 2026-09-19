@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, Path, Query, UploadFile, status
 
 from app.api.deps import AdminUser, DbSession
+from app.models import ProductCategory
 from app.schemas.common import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, Page
 from app.schemas.product import ProductCreate, ProductOut, ProductPhotoOut, ProductUpdate
 from app.services import product_service, upload_service
@@ -30,6 +31,9 @@ async def list_products(
     _admin: AdminUser,
     include_inactive: Annotated[bool, Query(description="Показывать скрытые товары")] = False,
     search: Annotated[str | None, Query(max_length=255, description="Поиск по тексту")] = None,
+    category: Annotated[
+        ProductCategory | None, Query(description="Фильтр по категории")
+    ] = None,
     limit: LimitQuery = DEFAULT_PAGE_LIMIT,
     offset: OffsetQuery = 0,
 ) -> Page[ProductOut]:
@@ -37,6 +41,7 @@ async def list_products(
         session,
         include_inactive=include_inactive,
         search=search,
+        category=category,
         limit=limit,
         offset=offset,
     )

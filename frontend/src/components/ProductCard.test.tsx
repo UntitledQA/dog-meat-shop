@@ -11,6 +11,7 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
     id: 1,
     name: 'Говядина',
     description: 'Свежая говядина для крупных собак',
+    category: null,
     price_per_kg: '890.00',
     stock_kg: '12.500',
     photo_url: null,
@@ -78,5 +79,23 @@ describe('ProductCard — товара нет в наличии', () => {
     expect(screen.getByRole('button', { name: 'Нет в наличии' })).toBeDisabled();
     expect(screen.getByText('Закончился')).toBeInTheDocument();
     expect(onAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProductCard — подпись категории', () => {
+  it('показывает русскую подпись категории', () => {
+    renderCard(makeProduct({ category: 'horse-meat' }));
+
+    expect(screen.getByText('Конина')).toBeInTheDocument();
+  });
+
+  it('у товара без категории лишней подписи нет', () => {
+    // Название заведомо не совпадает с ярлыком категории, чтобы проверка была однозначной.
+    renderCard(makeProduct({ name: 'Куриные шейки', category: null }));
+
+    // Не должно появиться ни «Без категории», ни какого-либо ярлыка категории.
+    expect(screen.queryByText('Без категории')).not.toBeInTheDocument();
+    expect(screen.queryByText('Говядина')).not.toBeInTheDocument();
+    expect(screen.getByText('Куриные шейки')).toBeInTheDocument();
   });
 });

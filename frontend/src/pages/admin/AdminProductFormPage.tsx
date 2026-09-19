@@ -12,6 +12,7 @@ import {
   useUpdateProduct,
 } from '../../api/queries';
 import type { Product, ProductCreate } from '../../api/types';
+import { PRODUCT_CATEGORIES, categoryLabel, isProductCategory } from '../../lib/categories';
 import { toMoneyString, toWeightString } from '../../lib/money';
 import { hasErrors, validateProductForm } from '../../lib/validation';
 import type { CheckoutErrors, ProductFormValues } from '../../lib/validation';
@@ -27,6 +28,7 @@ const MAX_PHOTO_MB = 5;
 const EMPTY_FORM: ProductFormValues = {
   name: '',
   description: '',
+  category: '',
   pricePerKg: '',
   stockKg: '',
   photoUrl: '',
@@ -37,6 +39,7 @@ function toFormValues(product: Product): ProductFormValues {
   return {
     name: product.name,
     description: product.description ?? '',
+    category: product.category ?? '',
     pricePerKg: product.price_per_kg,
     stockKg: product.stock_kg,
     photoUrl: product.photo_url ?? '',
@@ -114,6 +117,7 @@ function ProductForm({ product }: { product: Product | null }) {
     const payload: ProductCreate = {
       name: values.name.trim(),
       description: description === '' ? null : description,
+      category: values.category === '' ? null : values.category,
       price_per_kg: toMoneyString(values.pricePerKg),
       stock_kg: toWeightString(values.stockKg),
       photo_url: values.photoUrl === '' ? null : values.photoUrl,
@@ -167,6 +171,29 @@ function ProductForm({ product }: { product: Product | null }) {
               onChange={(event) => setField('description', event.target.value)}
             />
             <FieldError message={errors.description} />
+          </div>
+
+          <div className="field">
+            <label className="field__label" htmlFor="product-category">
+              Категория
+            </label>
+            <select
+              id="product-category"
+              className="select"
+              value={values.category}
+              onChange={(event) => {
+                const value = event.target.value;
+                setField('category', isProductCategory(value) ? value : '');
+              }}
+            >
+              <option value="">— без категории —</option>
+              {PRODUCT_CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {categoryLabel(category)}
+                </option>
+              ))}
+            </select>
+            <span className="field__hint">Необязательно — помогает покупателю в каталоге.</span>
           </div>
 
           <div className="field">

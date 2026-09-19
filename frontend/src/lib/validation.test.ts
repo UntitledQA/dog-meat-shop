@@ -6,7 +6,7 @@ import {
   validateCheckout,
   validateProductForm,
 } from './validation';
-import type { CheckoutFormValues } from './validation';
+import type { CheckoutFormValues, ProductFormValues } from './validation';
 
 const NOW = new Date('2026-09-08T10:00:00');
 
@@ -90,9 +90,10 @@ describe('validateCheckout — дата', () => {
 });
 
 describe('validateProductForm — админская форма', () => {
-  const base = {
+  const base: ProductFormValues = {
     name: 'Говядина',
     description: '',
+    category: '',
     pricePerKg: '890',
     stockKg: '12.5',
     photoUrl: '',

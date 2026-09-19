@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import func, or_, select
 
 from app.core.db import supports_row_locking
-from app.models import Product
+from app.models import Product, ProductCategory
 from app.repositories.base import BaseRepository
 
 __all__ = ["ProductRepository"]
@@ -19,9 +19,13 @@ class ProductRepository(BaseRepository):
 
     # --- витрина -----------------------------------------------------------
 
-    async def list_active(self, *, limit: int = 20, offset: int = 0) -> tuple[list[Product], int]:
+    async def list_active(
+        self, *, category: ProductCategory | None = None, limit: int = 20, offset: int = 0
+    ) -> tuple[list[Product], int]:
         """Активные товары каталога. Товар с нулевым остатком тоже виден."""
         stmt = select(Product).where(Product.is_active.is_(True))
+        if category is not None:
+            stmt = stmt.where(Product.category == category)
         total = await self.count(stmt)
         rows = await self.session.scalars(
             stmt.order_by(Product.id.asc()).limit(limit).offset(offset)
@@ -40,12 +44,15 @@ class ProductRepository(BaseRepository):
         *,
         include_inactive: bool = False,
         search: str | None = None,
+        category: ProductCategory | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> tuple[list[Product], int]:
         stmt = select(Product)
         if not include_inactive:
             stmt = stmt.where(Product.is_active.is_(True))
+        if category is not None:
+            stmt = stmt.where(Product.category == category)
 
         needle = (search or "").strip()
         if needle:

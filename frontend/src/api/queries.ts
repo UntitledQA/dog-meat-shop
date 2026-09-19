@@ -10,6 +10,7 @@ import type {
   AdminOrderListParams,
   AdminProductListParams,
   AppSettings,
+  CatalogListParams,
   Order,
   OrderCreate,
   OrderStatus,
@@ -35,7 +36,7 @@ export const queryKeys = {
   settings: ['settings'] as const,
   addressSuggestions: (query: string, limit: number) =>
     ['addresses', 'suggest', query, limit] as const,
-  catalog: (params: PageParams) => ['catalog', params] as const,
+  catalog: (params: CatalogListParams) => ['catalog', params] as const,
   product: (id: number) => ['product', id] as const,
   myOrders: (params: PageParams) => ['orders', params] as const,
   myOrder: (id: number) => ['order', id] as const,
@@ -112,7 +113,7 @@ export function useAddressSuggestions(
   return result;
 }
 
-export function useCatalog(params: PageParams = {}): UseQueryResult<Page<Product>, unknown> {
+export function useCatalog(params: CatalogListParams = {}): UseQueryResult<Page<Product>, unknown> {
   return useQuery({
     queryKey: queryKeys.catalog(params),
     queryFn: () => api.getCatalog(params),
