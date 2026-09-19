@@ -59,7 +59,7 @@ services:
       - --port
       - "8000"
       - --workers
-      - "2"
+      - "${UVICORN_WORKERS:-2}"
       - --proxy-headers
       - --forwarded-allow-ips
       - ${TRUSTED_PROXY_IPS:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
